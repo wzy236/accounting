@@ -1,0 +1,66 @@
+<%- include('partials/head', { title: '导入对账单', active: 'import' }) %>
+
+<h1>导入银行 PDF 对账单</h1>
+
+<% if (error) { %>
+  <p class="error"><%= error %></p>
+<% } %>
+
+
+<% if (!pending) { %>
+  <section class="add-form-section">
+    <p class="hint">
+      支持上传银行/信用卡对账单 PDF，系统会尝试自动识别每一行的日期、描述和金额。
+      解析基于常见格式的启发式规则，<strong>并非 100% 准确</strong>，导入前你可以在预览页逐条核对、修改或取消勾选。
+    </p>
+    <form method="post" action="/import/upload" enctype="multipart/form-data">
+      <label>选择 PDF 文件
+        <input type="file" name="pdf" accept="application/pdf" required />
+      </label>
+      <button type="submit" class="btn primary">上传并解析</button>
+    </form>
+  </section>
+<% } else { %>
+  <section>
+    <p class="hint">识别到 <%= pending.length %> 条候选记录，请核对后确认导入。取消勾选可跳过某条记录。</p>
+    <form method="post" action="/import/confirm">
+      <table class="tx-table">
+        <thead>
+          <tr>
+            <th>导入</th><th>日期</th><th>类型</th><th>分类</th><th>金额</th><th>描述</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% pending.forEach(function(c, i) { %>
+            <tr>
+              <td><input type="checkbox" name="include" value="<%= i %>" checked /></td>
+              <td><input type="date" name="date" value="<%= c.date %>" required /></td>
+              <td>
+                <select name="type" class="type-select">
+                  <option value="expense" <%= c.type === 'expense' ? 'selected' : '' %>>支出</option>
+                  <option value="income" <%= c.type === 'income' ? 'selected' : '' %>>收入</option>
+                </select>
+              </td>
+              <td><select name="category_id" class="category-select"></select></td>
+              <td><input type="number" name="amount" step="0.01" min="0.01" value="<%= c.amount.toFixed(2) %>" required /></td>
+              <td><input type="text" name="description" value="<%= c.description %>" /></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">确认导入</button>
+      </div>
+    </form>
+    <form method="post" action="/import/cancel" class="inline-form">
+      <button type="submit" class="link-btn">取消，重新上传</button>
+    </form>
+  </section>
+<% } %>
+
+<script>
+  window.__CATEGORIES__ = <%- JSON.stringify(categories) %>;
+</script>
+<script src="/js/app.js"></script>
+
+<%- include('partials/foot') %>
