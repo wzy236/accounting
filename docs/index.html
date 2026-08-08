@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>记账本</title>
+  <meta name="description" content="个人记账网站：收支记录、自定义分类、饼图统计、银行 PDF 对账单导入" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#3d5a80" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ============ 登录 / 注册 ============ -->
+<div id="auth-view" class="auth-wrap" hidden>
+  <div class="auth-card">
+    <h1>📒 记账本</h1>
+
+    <form id="login-form">
+      <p id="login-error" class="error" hidden></p>
+      <label>邮箱
+        <input type="email" name="email" required autocomplete="email" />
+      </label>
+      <label>密码
+        <input type="password" name="password" required autocomplete="current-password" />
+      </label>
+      <button type="submit" class="btn primary">登录</button>
+    </form>
+    <p class="auth-switch">还没有账号？<a href="#" id="show-register">立即注册</a></p>
+
+    <form id="register-form" hidden>
+      <p id="register-error" class="error" hidden></p>
+      <p id="register-success" class="success" hidden></p>
+      <label>邮箱
+        <input type="email" name="email" required autocomplete="email" />
+      </label>
+      <label>密码（至少 6 位）
+        <input type="password" name="password" minlength="6" required autocomplete="new-password" />
+      </label>
+      <label>确认密码
+        <input type="password" name="confirm" minlength="6" required autocomplete="new-password" />
+      </label>
+      <button type="submit" class="btn primary">注册</button>
+    </form>
+    <p class="auth-switch" id="switch-to-login-line" hidden>已有账号？<a href="#" id="show-login">直接登录</a></p>
+  </div>
+</div>
+
+<!-- ============ 主应用 ============ -->
+<div id="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/transactions">📒 记账本</a>
+      <nav class="nav">
+        <a href="#/transactions" data-view="transactions">记账</a>
+        <a href="#/charts" data-view="charts">统计图表</a>
+        <a href="#/categories" data-view="categories">分类管理</a>
+        <a href="#/import" data-view="import">导入对账单</a>
+      </nav>
+      <div class="user-area">
+        <span class="username" id="current-user-email"></span>
+        <button type="button" class="link-btn" id="logout-btn">退出</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ---- 记账 ---- -->
+    <section id="view-transactions" class="view">
+      <div class="page-header">
+        <h1>记账</h1>
+        <input type="month" id="tx-month-picker" />
+      </div>
+
+      <div class="summary-cards">
+        <div class="card income">
+          <span class="label">本月收入</span>
+          <span class="value" id="summary-income">¥0.00</span>
+        </div>
+        <div class="card expense">
+          <span class="label">本月支出</span>
+          <span class="value" id="summary-expense">¥0.00</span>
+        </div>
+        <div class="card balance">
+          <span class="label">本月结余</span>
+          <span class="value" id="summary-balance">¥0.00</span>
+        </div>
+      </div>
+
+      <section class="add-form-section">
+        <h2>新增一笔</h2>
+        <form id="add-tx-form" class="tx-form">
+          <div class="tx-form-row">
+            <label>日期
+              <input type="date" name="date" required />
+            </label>
+            <label>类型
+              <select name="type" class="type-select">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+            </label>
+            <label>分类
+              <select name="category_id" class="category-select"></select>
+            </label>
+            <label>金额
+              <input type="number" name="amount" step="0.01" min="0.01" placeholder="0.00" required />
+            </label>
+            <label class="grow">备注
+              <input type="text" name="description" placeholder="选填" />
+            </label>
+            <button type="submit" class="btn primary">添加</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h2>本月明细</h2>
+        <div class="table-scroll">
+          <table class="tx-table">
+            <thead>
+              <tr><th>日期</th><th>类型</th><th>分类</th><th>金额</th><th>备注</th><th>来源</th><th></th><th></th></tr>
+            </thead>
+            <tbody id="tx-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- ---- 分类管理 ---- -->
+    <section id="view-categories" class="view" hidden>
+      <h1>分类管理</h1>
+
+      <section class="add-form-section">
+        <h2>新增分类</h2>
+        <form id="add-category-form" class="tx-form">
+          <div class="tx-form-row">
+            <label>名称
+              <input type="text" name="name" placeholder="例如：宠物" required />
+            </label>
+            <label>类型
+              <select name="type">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+            </label>
+            <label>颜色
+              <input type="color" name="color" value="#5c9ead" />
+            </label>
+            <button type="submit" class="btn primary">添加分类</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="category-columns">
+        <section>
+          <h2>支出分类</h2>
+          <ul class="category-list" id="expense-category-list"></ul>
+        </section>
+        <section>
+          <h2>收入分类</h2>
+          <ul class="category-list" id="income-category-list"></ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- ---- 统计图表 ---- -->
+    <section id="view-charts" class="view" hidden>
+      <div class="page-header">
+        <h1>统计图表</h1>
+        <input type="month" id="chart-month-picker" />
+      </div>
+      <div class="chart-columns">
+        <section class="chart-card">
+          <h2>支出分布 <span class="muted" id="expense-total-label"></span></h2>
+          <p class="empty" id="expense-empty" hidden>本月暂无支出记录</p>
+          <canvas id="expense-pie" width="360" height="360"></canvas>
+        </section>
+        <section class="chart-card">
+          <h2>收入分布 <span class="muted" id="income-total-label"></span></h2>
+          <p class="empty" id="income-empty" hidden>本月暂无收入记录</p>
+          <canvas id="income-pie" width="360" height="360"></canvas>
+        </section>
+      </div>
+    </section>
+
+    <!-- ---- 导入对账单 ---- -->
+    <section id="view-import" class="view" hidden>
+      <h1>导入银行 PDF 对账单</h1>
+      <p id="import-error" class="error" hidden></p>
+      <p id="import-success" class="success" hidden></p>
+
+      <section class="add-form-section" id="import-upload-section">
+        <p class="hint">
+          支持上传银行/信用卡对账单 PDF，系统会在你的浏览器本地解析每一行的日期、描述和金额（不会把 PDF 上传到任何服务器）。
+          解析基于常见格式的启发式规则，<strong>并非 100% 准确</strong>，导入前你可以在预览表格里逐条核对、修改或取消勾选。
+        </p>
+        <label>选择 PDF 文件
+          <input type="file" id="pdf-file-input" accept="application/pdf" />
+        </label>
+        <p id="pdf-parsing-hint" class="hint" hidden>正在解析 PDF…</p>
+      </section>
+
+      <section id="import-preview-section" hidden>
+        <p class="hint" id="import-preview-count"></p>
+        <div class="table-scroll">
+          <table class="tx-table">
+            <thead>
+              <tr><th>导入</th><th>日期</th><th>类型</th><th>分类</th><th>金额</th><th>描述</th></tr>
+            </thead>
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="import-confirm-btn">确认导入</button>
+          <button type="button" class="link-btn" id="import-cancel-btn">取消，重新上传</button>
+        </div>
+      </section>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/pdf.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
