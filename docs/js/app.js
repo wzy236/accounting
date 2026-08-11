@@ -1,4 +1,5 @@
-import { signUp, signIn, signOut, isLoggedIn, getCurrentUser } from './supabaseClient.js';
+import { signUp, signIn, signOut, isLoggedIn, getCurrentUser, clearLocalSession } from './supabaseClient.js';
+import { getSupabaseConfig, setSupabaseConfig, resetSupabaseConfig, hasCustomSupabaseConfig } from './config.js';
 import {
   listCategories,
   ensureDefaultCategories,
@@ -64,6 +65,79 @@ function populateCategorySelect(selectEl, type, currentId) {
 function showAuth() {
   document.getElementById('auth-view').hidden = false;
   document.getElementById('app-view').hidden = true;
+  document.getElementById('config-view').hidden = true;
+}
+
+let configReturnTo = 'auth';
+
+function showConfigPage(returnTo) {
+  configReturnTo = returnTo;
+  document.getElementById('auth-view').hidden = true;
+  document.getElementById('app-view').hidden = true;
+  document.getElementById('config-view').hidden = false;
+
+  const { url } = getSupabaseConfig();
+  document.getElementById('config-status').textContent = hasCustomSupabaseConfig()
+    ? `当前使用自定义项目：${url}`
+    : `当前使用默认项目：${url}`;
+  const form = document.getElementById('config-form');
+  form.reset();
+  form.elements.url.value = url;
+  document.getElementById('config-error').hidden = true;
+  document.getElementById('config-success').hidden = true;
+}
+
+function backFromConfigPage() {
+  if (configReturnTo === 'app' && isLoggedIn()) showApp();
+  else showAuth();
+}
+
+function wireConfigForm() {
+  const form = document.getElementById('config-form');
+  const errorEl = document.getElementById('config-error');
+  const successEl = document.getElementById('config-success');
+
+  document.getElementById('show-config-from-auth').addEventListener('click', (e) => {
+    e.preventDefault();
+    showConfigPage('auth');
+  });
+  document.getElementById('config-from-app-btn').addEventListener('click', () => {
+    showConfigPage('app');
+  });
+  document.getElementById('config-back').addEventListener('click', (e) => {
+    e.preventDefault();
+    backFromConfigPage();
+  });
+
+  document.getElementById('config-reset').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!confirm('恢复默认 Supabase 配置？这会清除当前登录状态。')) return;
+    resetSupabaseConfig();
+    clearLocalSession();
+    location.reload();
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    successEl.hidden = true;
+    const fd = new FormData(form);
+    const url = fd.get('url').trim().replace(/\/+$/, '');
+    const anonKey = fd.get('anonKey').trim();
+    if (!url || !anonKey) return;
+    try {
+      new URL(url);
+    } catch {
+      errorEl.textContent = 'Supabase URL 格式不对，应该形如 https://xxxx.supabase.co';
+      errorEl.hidden = false;
+      return;
+    }
+    setSupabaseConfig(url, anonKey);
+    clearLocalSession();
+    successEl.textContent = '已保存，正在重新加载…';
+    successEl.hidden = false;
+    setTimeout(() => location.reload(), 600);
+  });
 }
 
 async function showApp() {
@@ -537,6 +611,7 @@ function wireImportView() {
 
 function init() {
   wireAuthForms();
+  wireConfigForm();
   wireTransactionForm();
   wireCategoryForm();
   wireChartsView();
