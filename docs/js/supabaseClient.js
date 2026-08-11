@@ -1,4 +1,4 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { getSupabaseConfig } from './config.js';
 
 const SESSION_KEY = 'accounting_session';
 const REFRESH_SKEW_MS = 60 * 1000; // 提前 60 秒刷新 token
@@ -20,6 +20,11 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+/** 切换 Supabase 项目配置前调用，清掉属于旧项目的本地 session。 */
+export function clearLocalSession() {
+  clearSession();
+}
+
 function sessionFromAuthResponse(data) {
   return {
     access_token: data.access_token,
@@ -39,11 +44,12 @@ async function parseJsonSafe(res) {
 }
 
 async function authFetch(path, body, extraHeaders = {}) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+  const { url, anonKey } = getSupabaseConfig();
+  const res = await fetch(`${url}/auth/v1${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
+      apikey: anonKey,
       ...extraHeaders,
     },
     body: JSON.stringify(body),
@@ -128,14 +134,15 @@ export async function restRequest(path, { method = 'GET', body, prefer } = {}) {
     throw err;
   }
 
+  const { url, anonKey } = getSupabaseConfig();
   const headers = {
-    apikey: SUPABASE_ANON_KEY,
+    apikey: anonKey,
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
   if (prefer) headers.Prefer = prefer;
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+  const res = await fetch(`${url}/rest/v1${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

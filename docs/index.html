@@ -45,6 +45,38 @@
       <button type="submit" class="btn primary">注册</button>
     </form>
     <p class="auth-switch" id="switch-to-login-line" hidden>已有账号？<a href="#" id="show-login">直接登录</a></p>
+
+    <p class="auth-switch"><a href="#" id="show-config-from-auth">使用自己的 Supabase 项目 / Supabase 设置</a></p>
+  </div>
+</div>
+
+<!-- ============ Supabase 设置 ============ -->
+<div id="config-view" class="auth-wrap" hidden>
+  <div class="auth-card">
+    <h1>⚙️ Supabase 设置</h1>
+    <p class="hint">
+      默认已经配置好一个可用的 Supabase 项目。如果你想用自己的 Supabase 项目存数据，
+      在下面粘贴你自己项目的 <strong>Project URL</strong> 和 <strong>anon / publishable key</strong>
+      （在 Supabase 后台 Project Settings → API 页面可以找到），并确保已经在该项目的 SQL Editor
+      里执行过仓库里的 <code>sql/schema.sql</code>。配置只保存在你当前这台设备的浏览器里，不会影响其他访问者。
+    </p>
+    <p id="config-status" class="hint"></p>
+    <form id="config-form">
+      <p id="config-error" class="error" hidden></p>
+      <p id="config-success" class="success" hidden></p>
+      <label>Supabase Project URL
+        <input type="url" name="url" placeholder="https://xxxx.supabase.co" required />
+      </label>
+      <label>anon / publishable key
+        <input type="text" name="anonKey" placeholder="sb_publishable_... 或 eyJ..." required />
+      </label>
+      <button type="submit" class="btn primary">保存并重新加载</button>
+    </form>
+    <p class="auth-switch">
+      <a href="#" id="config-reset">恢复默认配置</a>
+      &nbsp;|&nbsp;
+      <a href="#" id="config-back">返回</a>
+    </p>
   </div>
 </div>
 
@@ -61,6 +93,7 @@
       </nav>
       <div class="user-area">
         <span class="username" id="current-user-email"></span>
+        <button type="button" class="link-btn" id="config-from-app-btn">Supabase 设置</button>
         <button type="button" class="link-btn" id="logout-btn">退出</button>
       </div>
     </div>
