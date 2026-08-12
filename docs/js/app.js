@@ -619,7 +619,9 @@ function init() {
   window.addEventListener('hashchange', handleRoute);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
+    // updateViaCache: 'none' 让浏览器每次都用网络请求校验 sw.js 本身有没有更新，
+    // 不然 sw.js 可能被 HTTP 缓存卡住，网站更新了却一直用旧的 service worker。
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {
       // 离线支持是增强功能，注册失败不影响正常使用
     });
   }
