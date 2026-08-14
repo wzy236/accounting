@@ -11,7 +11,7 @@
 | 前端 | 纯 HTML + CSS + JS | 无框架，`docs/index.html` 单页应用，hash 路由 |
 | 图表 | Chart.js | 本地 vendor（`docs/vendor/chart.umd.min.js`），不依赖 CDN |
 | PDF 解析 | pdf.js | 本地 vendor，浏览器端解析，PDF 不会上传到任何服务器 |
-| 离线 | Service Worker | app shell 走 cache-first，Supabase 请求走 network-first |
+| 离线 | Service Worker | app shell 和 Supabase 请求都走 network-first，在线时始终拿最新版本，离线时才退回缓存 |
 | PWA | manifest.json | 可安装到手机/桌面 |
 
 ## 上线步骤
@@ -20,7 +20,7 @@
 
 打开你的 Supabase 项目 → **SQL Editor** → 新建查询 → 粘贴 [`sql/schema.sql`](sql/schema.sql) 的全部内容 → Run。
 
-这一步会创建 `categories`（分类）和 `transactions`（交易记录）两张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。
+这一步会创建 `categories`（分类）、`transactions`（交易记录）、`accounts`（银行账户/信用卡）、`recurring_bills`（定时账单）四张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。已经跑过旧版 `schema.sql` 的项目重新执行一次也是安全的，会自动补上新增的表和列。
 
 ### 2. 确认 Auth 邮箱设置
 
@@ -30,14 +30,14 @@ Supabase 项目 → **Authentication → Providers → Email**：
 
 ### 3. 配置前端连接的 Supabase 项目
 
-`docs/js/config.js` 里已经填好了当前项目的 URL 和 anon key。如果要换成别的 Supabase 项目，改这两个值即可：
+`docs/js/config.js` 里已经填好了默认项目的 URL 和 anon/publishable key。如果要换成自己的 Supabase 项目，不需要改代码——打开网站，登录页底部或登录后顶部导航都有「Supabase 设置」入口，直接粘贴自己项目的 URL + key，保存后只存在当前浏览器的 `localStorage` 里，不影响默认配置和其他访问者。也可以直接改 `docs/js/config.js` 里的默认值：
 
 ```js
-export const SUPABASE_URL = 'https://xxxx.supabase.co';
-export const SUPABASE_ANON_KEY = 'xxxx';
+const DEFAULT_SUPABASE_URL = 'https://xxxx.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'xxxx';
 ```
 
-> anon key 设计上就是公开的（本来就会被打进前端代码里），真正的数据安全依赖第 1 步开启的 RLS 策略，**千万不要把 `service_role` key 放到前端**。
+> anon/publishable key 设计上就是公开的（本来就会被打进前端代码里），真正的数据安全依赖第 1 步开启的 RLS 策略，**千万不要把 `service_role` key 放到前端**。
 
 ### 4. 开启 GitHub Pages
 
@@ -58,10 +58,12 @@ python3 -m http.server 8080 --directory docs
 - 邮箱注册 / 登录（Supabase Auth），每个用户独立账本，数据存 Supabase 的 Postgres
 - 手动记录收入/支出，日期、金额、备注
 - 自定义收入/支出分类（含颜色标记），首次登录自动写入一套默认分类
-- 按月查看收支明细、编辑、删除
+- 按月查看收支明细、编辑、删除，可关联到某个账户
 - 按月饼图统计（支出/收入分别按分类展示）
 - 上传银行 PDF 对账单，浏览器本地用 pdf.js 提取文本并识别候选交易记录，预览核对后批量导入
-- 离线可用 app 外壳（Service Worker 缓存静态资源），可安装为 PWA
+- **账户管理**：添加多个银行账户/信用卡，自动按「初始余额 + 关联交易的收支」算出当前余额（信用卡欠款显示为负数）
+- **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），到期后打开网站会自动补记一笔交易并计入账户余额——纯静态网站没有服务器定时任务，靠打开网站时"补课"触发，不精确到具体时间点但不会漏
+- 离线可用 app 外壳（Service Worker 缓存静态资源，network-first 保证更新立即生效），可安装为 PWA
 
 ## PDF 导入说明
 

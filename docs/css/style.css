@@ -237,6 +237,10 @@ input[type="color"] {
 
 .swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
+.balance { font-weight: 700; font-size: 1.05rem; }
+.balance.positive { color: var(--income); }
+.balance.negative { color: var(--expense); }
+
 .chart-columns { display: flex; gap: 24px; flex-wrap: wrap; }
 .chart-card { flex: 1; min-width: 320px; background: var(--card-bg); border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
 .chart-card canvas { max-width: 100%; }

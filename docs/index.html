@@ -87,6 +87,8 @@
       <a class="brand" href="#/transactions">📒 记账本</a>
       <nav class="nav">
         <a href="#/transactions" data-view="transactions">记账</a>
+        <a href="#/accounts" data-view="accounts">账户</a>
+        <a href="#/bills" data-view="bills">定时账单</a>
         <a href="#/charts" data-view="charts">统计图表</a>
         <a href="#/categories" data-view="categories">分类管理</a>
         <a href="#/import" data-view="import">导入对账单</a>
@@ -139,6 +141,9 @@
             <label>分类
               <select name="category_id" class="category-select"></select>
             </label>
+            <label>账户
+              <select name="account_id" class="account-select"></select>
+            </label>
             <label>金额
               <input type="number" name="amount" step="0.01" min="0.01" placeholder="0.00" required />
             </label>
@@ -155,12 +160,108 @@
         <div class="table-scroll">
           <table class="tx-table">
             <thead>
-              <tr><th>日期</th><th>类型</th><th>分类</th><th>金额</th><th>备注</th><th>来源</th><th></th><th></th></tr>
+              <tr><th>日期</th><th>类型</th><th>分类</th><th>账户</th><th>金额</th><th>备注</th><th>来源</th><th></th><th></th></tr>
             </thead>
             <tbody id="tx-table-body"></tbody>
           </table>
         </div>
       </section>
+    </section>
+
+    <!-- ---- 账户 ---- -->
+    <section id="view-accounts" class="view" hidden>
+      <h1>账户</h1>
+
+      <section class="add-form-section">
+        <h2>新增账户</h2>
+        <p class="hint">信用卡如果当前有欠款，初始余额填负数（比如欠 2000 就填 -2000）。</p>
+        <form id="add-account-form" class="tx-form">
+          <div class="tx-form-row">
+            <label class="grow">名称
+              <input type="text" name="name" placeholder="例如：招商银行储蓄卡" required />
+            </label>
+            <label>类型
+              <select name="type">
+                <option value="bank">银行账户</option>
+                <option value="credit_card">信用卡</option>
+              </select>
+            </label>
+            <label>初始余额
+              <input type="number" name="initial_balance" step="0.01" value="0" required />
+            </label>
+            <label>颜色
+              <input type="color" name="color" value="#3d5a80" />
+            </label>
+            <button type="submit" class="btn primary">添加账户</button>
+          </div>
+        </form>
+      </section>
+
+      <ul class="category-list" id="account-list"></ul>
+    </section>
+
+    <!-- ---- 定时账单 ---- -->
+    <section id="view-bills" class="view" hidden>
+      <h1>定时账单</h1>
+      <p class="hint">
+        到期后打开网站会自动补记一笔交易并计入账户余额。这是纯静态网站，没有服务器定时任务，
+        不会精确到那一秒触发，但只要你不定期打开网站，就不会漏算。
+      </p>
+
+      <section class="add-form-section">
+        <h2>新增定时账单</h2>
+        <form id="add-bill-form" class="tx-form">
+          <div class="tx-form-row">
+            <label class="grow">名称
+              <input type="text" name="name" placeholder="例如：信用卡还款" required />
+            </label>
+            <label>类型
+              <select name="type" class="type-select">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+            </label>
+            <label>金额
+              <input type="number" name="amount" step="0.01" min="0.01" required />
+            </label>
+            <label>分类
+              <select name="category_id" class="category-select"></select>
+            </label>
+            <label>账户
+              <select name="account_id" class="account-select"></select>
+            </label>
+          </div>
+          <div class="tx-form-row">
+            <label>重复频率
+              <select name="frequency" id="bill-frequency-select">
+                <option value="monthly">每月</option>
+                <option value="weekly">每周</option>
+                <option value="daily">每天</option>
+              </select>
+            </label>
+            <label id="bill-day-of-month-label">每月第几天
+              <input type="number" name="day_of_month" min="1" max="31" value="1" />
+            </label>
+            <label id="bill-day-of-week-label" hidden>星期几
+              <select name="day_of_week">
+                <option value="1">周一</option>
+                <option value="2">周二</option>
+                <option value="3">周三</option>
+                <option value="4">周四</option>
+                <option value="5">周五</option>
+                <option value="6">周六</option>
+                <option value="0">周日</option>
+              </select>
+            </label>
+            <label>首次到期日
+              <input type="date" name="next_due_date" required />
+            </label>
+            <button type="submit" class="btn primary">添加</button>
+          </div>
+        </form>
+      </section>
+
+      <ul class="category-list" id="bill-list"></ul>
     </section>
 
     <!-- ---- 分类管理 ---- -->
@@ -242,7 +343,7 @@
         <div class="table-scroll">
           <table class="tx-table">
             <thead>
-              <tr><th>导入</th><th>日期</th><th>类型</th><th>分类</th><th>金额</th><th>描述</th></tr>
+              <tr><th>导入</th><th>日期</th><th>类型</th><th>分类</th><th>账户</th><th>金额</th><th>描述</th></tr>
             </thead>
             <tbody id="import-preview-body"></tbody>
           </table>

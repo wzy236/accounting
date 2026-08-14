@@ -68,3 +68,86 @@ create policy "transactions_update_own" on public.transactions
 drop policy if exists "transactions_delete_own" on public.transactions;
 create policy "transactions_delete_own" on public.transactions
   for delete using (auth.uid() = user_id);
+
+-- ========== 账户表（银行卡 / 信用卡）==========
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  type text not null check (type in ('bank','credit_card')),
+  initial_balance numeric(12,2) not null default 0,
+  color text not null default '#3d5a80',
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+create index if not exists idx_accounts_user on public.accounts (user_id);
+
+alter table public.accounts enable row level security;
+
+drop policy if exists "accounts_select_own" on public.accounts;
+create policy "accounts_select_own" on public.accounts
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "accounts_insert_own" on public.accounts;
+create policy "accounts_insert_own" on public.accounts
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "accounts_update_own" on public.accounts;
+create policy "accounts_update_own" on public.accounts
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "accounts_delete_own" on public.accounts;
+create policy "accounts_delete_own" on public.accounts
+  for delete using (auth.uid() = user_id);
+
+-- 交易记录关联账户（可选，不选则不计入任何账户余额）
+alter table public.transactions
+  add column if not exists account_id uuid references public.accounts(id) on delete set null;
+
+create index if not exists idx_transactions_account on public.transactions (account_id);
+
+-- 定时账单自动生成的交易记录也算一种来源
+alter table public.transactions drop constraint if exists transactions_source_check;
+alter table public.transactions add constraint transactions_source_check
+  check (source in ('manual','pdf_import','recurring'));
+
+-- ========== 定时账单表 ==========
+-- frequency = 'daily'：每天；'weekly'：按 day_of_week（0=周日...6=周六）；'monthly'：按 day_of_month（超过当月天数自动取当月最后一天）。
+create table if not exists public.recurring_bills (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  type text not null check (type in ('income','expense')),
+  amount numeric(12,2) not null check (amount > 0),
+  category_id uuid references public.categories(id) on delete set null,
+  account_id uuid references public.accounts(id) on delete set null,
+  frequency text not null check (frequency in ('daily','weekly','monthly')),
+  day_of_week int check (day_of_week between 0 and 6),
+  day_of_month int check (day_of_month between 1 and 31),
+  next_due_date date not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  check (frequency <> 'weekly' or day_of_week is not null),
+  check (frequency <> 'monthly' or day_of_month is not null)
+);
+
+create index if not exists idx_recurring_bills_user on public.recurring_bills (user_id, active);
+
+alter table public.recurring_bills enable row level security;
+
+drop policy if exists "recurring_bills_select_own" on public.recurring_bills;
+create policy "recurring_bills_select_own" on public.recurring_bills
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "recurring_bills_insert_own" on public.recurring_bills;
+create policy "recurring_bills_insert_own" on public.recurring_bills
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "recurring_bills_update_own" on public.recurring_bills;
+create policy "recurring_bills_update_own" on public.recurring_bills
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "recurring_bills_delete_own" on public.recurring_bills;
+create policy "recurring_bills_delete_own" on public.recurring_bills
+  for delete using (auth.uid() = user_id);
