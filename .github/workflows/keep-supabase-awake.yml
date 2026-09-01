@@ -1,0 +1,36 @@
+name: Keep Supabase awake
+
+# Supabase 免费版项目如果连续 7 天没有 API 请求会被自动暂停（需要去后台手动点 Restore 才能恢复）。
+# 这个 workflow 每 3 天请求一次 Supabase 的 REST API，制造一次真实的活动，防止项目被自动暂停。
+on:
+  schedule:
+    - cron: '0 4 */3 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 从 docs/js/config.js 读取当前 Supabase 项目配置
+        id: config
+        run: |
+          url=$(grep -oP "(?<=DEFAULT_SUPABASE_URL = ')[^']+" docs/js/config.js)
+          key=$(grep -oP "(?<=DEFAULT_SUPABASE_ANON_KEY = ')[^']+" docs/js/config.js)
+          if [ -z "$url" ] || [ -z "$key" ]; then
+            echo "没能从 config.js 解析出 URL/key，检查一下文件格式是否变了" >&2
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: 请求一次 Supabase REST API
+        run: |
+          curl -sf "${{ steps.config.outputs.url }}/rest/v1/categories?select=id&limit=1" \
+            -H "apikey: ${{ steps.config.outputs.key }}" \
+            -o /dev/null

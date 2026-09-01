@@ -14,6 +14,8 @@
 | 离线 | Service Worker | app shell 和 Supabase 请求都走 network-first，在线时始终拿最新版本，离线时才退回缓存 |
 | PWA | manifest.json | 可安装到手机/桌面 |
 
+> Supabase 免费版项目连续 7 天没有 API 请求会自动暂停（登录时报 `Failed to fetch` 大概率就是这个），仓库里的 [`.github/workflows/keep-supabase-awake.yml`](.github/workflows/keep-supabase-awake.yml) 会每 3 天自动请求一次 Supabase 接口防止暂停。如果项目已经被暂停了，还是要先去 Supabase 后台手动点一次 **Restore** 才能恢复。
+
 ## 上线步骤
 
 ### 1. 建 Supabase 数据库
