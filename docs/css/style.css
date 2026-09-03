@@ -235,6 +235,9 @@ input[type="color"] {
 .category-list .cat-name { flex: 1; }
 .category-list .empty { color: var(--muted); padding: 10px 14px; }
 
+.category-list li.subcategory { padding-left: 38px; }
+.category-list li.subcategory .cat-name::before { content: "↳ "; color: var(--muted); }
+
 .swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
 .balance { font-weight: 700; font-size: 1.05rem; }

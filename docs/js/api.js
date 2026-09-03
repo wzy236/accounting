@@ -30,10 +30,10 @@ export async function ensureDefaultCategories() {
   return listCategories();
 }
 
-export async function createCategory({ name, type, color }) {
+export async function createCategory({ name, type, color, parent_id }) {
   return restRequest('/categories', {
     method: 'POST',
-    body: { name, type, color },
+    body: { name, type, color, parent_id: parent_id || null },
     prefer: 'return=representation',
   });
 }
