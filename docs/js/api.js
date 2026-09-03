@@ -138,6 +138,23 @@ export async function getAccountBalances() {
   }));
 }
 
+/**
+ * 把账户余额调整到 targetBalance：按差额补一笔收入/支出交易（source: 'adjustment'），
+ * 而不是直接改数字，这样余额的每次变动都在记账记录里留痕。差额为 0 时什么都不做。
+ */
+export async function adjustAccountBalance(accountId, currentBalance, targetBalance) {
+  const delta = Number(targetBalance) - Number(currentBalance);
+  if (delta === 0) return null;
+  return createTransaction({
+    date: todayDateStr(),
+    type: delta > 0 ? 'income' : 'expense',
+    amount: Math.abs(delta),
+    account_id: accountId,
+    description: '余额调整',
+    source: 'adjustment',
+  });
+}
+
 /* ================= 定时账单 ================= */
 
 export async function listRecurringBills() {

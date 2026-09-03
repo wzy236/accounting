@@ -107,10 +107,10 @@ alter table public.transactions
 
 create index if not exists idx_transactions_account on public.transactions (account_id);
 
--- 定时账单自动生成的交易记录也算一种来源
+-- 定时账单自动生成、手动调整账户余额生成的交易记录，也各算一种来源
 alter table public.transactions drop constraint if exists transactions_source_check;
 alter table public.transactions add constraint transactions_source_check
-  check (source in ('manual','pdf_import','recurring'));
+  check (source in ('manual','pdf_import','recurring','adjustment'));
 
 -- ========== 定时账单表 ==========
 -- frequency = 'daily'：每天；'weekly'：按 day_of_week（0=周日...6=周六）；'monthly'：按 day_of_month（超过当月天数自动取当月最后一天）。
