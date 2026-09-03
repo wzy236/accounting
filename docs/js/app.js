@@ -63,11 +63,30 @@ function showToast(message, isError = false) {
   showToast._t = setTimeout(() => { el.hidden = true; }, 3000);
 }
 
+/** 把一组分类按“顶级分类 -> 紧跟它的子分类”的顺序展开，用于下拉菜单和列表展示。 */
+function buildCategoryTree(list) {
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const roots = list.filter((c) => !c.parent_id).sort(byName);
+  const result = [];
+  roots.forEach((root) => {
+    result.push({ cat: root, depth: 0 });
+    list.filter((c) => c.parent_id === root.id).sort(byName)
+      .forEach((child) => result.push({ cat: child, depth: 1 }));
+  });
+  return result;
+}
+
 function populateCategorySelect(selectEl, type, currentId) {
-  const opts = categories.filter((c) => c.type === type);
+  const opts = buildCategoryTree(categories.filter((c) => c.type === type));
   selectEl.innerHTML = '<option value="">未分类</option>' +
-    opts.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    opts.map(({ cat, depth }) => `<option value="${cat.id}">${depth ? '　' : ''}${escapeHtml(cat.name)}</option>`).join('');
   if (currentId) selectEl.value = String(currentId);
+}
+
+function populateParentCategorySelect(selectEl) {
+  const roots = categories.filter((c) => c.type === 'expense' && !c.parent_id).sort((a, b) => a.name.localeCompare(b.name));
+  selectEl.innerHTML = '<option value="">无（作为顶级分类）</option>' +
+    roots.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 }
 
 function populateAccountSelect(selectEl, currentId) {
@@ -88,6 +107,8 @@ function refreshFormSelects() {
     populateCategorySelect(billForm.querySelector('.category-select'), billForm.querySelector('.type-select').value, null);
     populateAccountSelect(billForm.querySelector('.account-select'), null);
   }
+  const parentSelect = document.getElementById('category-parent-select');
+  if (parentSelect) populateParentCategorySelect(parentSelect);
 }
 
 /* ================= 认证 ================= */
@@ -427,17 +448,22 @@ function renderCategoryList(elId, list) {
     ul.innerHTML = '<li class="empty">暂无分类</li>';
     return;
   }
-  list.forEach((c) => {
+  buildCategoryTree(list).forEach(({ cat, depth }) => {
+    const hasChildren = list.some((c) => c.parent_id === cat.id);
     const li = document.createElement('li');
+    if (depth) li.classList.add('subcategory');
     li.innerHTML = `
-      <span class="swatch" style="background: ${escapeHtml(c.color)}"></span>
-      <span class="cat-name">${escapeHtml(c.name)}</span>
+      <span class="swatch" style="background: ${escapeHtml(cat.color)}"></span>
+      <span class="cat-name">${escapeHtml(cat.name)}</span>
       <button type="button" class="link-btn danger delete-cat-btn">删除</button>
     `;
     li.querySelector('.delete-cat-btn').addEventListener('click', async () => {
-      if (!confirm('删除后该分类下的记录会变为未分类，确认删除？')) return;
+      const msg = hasChildren
+        ? '删除后子分类会一起被删除，相关记录都会变为未分类，确认删除？'
+        : '删除后该分类下的记录会变为未分类，确认删除？';
+      if (!confirm(msg)) return;
       try {
-        await deleteCategory(c.id);
+        await deleteCategory(cat.id);
         showToast('已删除');
         await reloadCategories();
       } catch (e) {
@@ -450,14 +476,30 @@ function renderCategoryList(elId, list) {
 
 function wireCategoryForm() {
   const form = document.getElementById('add-category-form');
+  const typeSelect = document.getElementById('category-type-select');
+  const parentLabel = document.getElementById('category-parent-label');
+  const parentSelect = document.getElementById('category-parent-select');
+
+  populateParentCategorySelect(parentSelect);
+  typeSelect.addEventListener('change', (e) => {
+    parentLabel.hidden = e.target.value !== 'expense';
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
     const name = fd.get('name').trim();
     if (!name) return;
+    const type = fd.get('type');
     try {
-      await createCategory({ name, type: fd.get('type'), color: fd.get('color') });
+      await createCategory({
+        name,
+        type,
+        color: fd.get('color'),
+        parent_id: type === 'expense' ? fd.get('parent_id') || null : null,
+      });
       form.reset();
+      parentLabel.hidden = false;
       showToast('已添加分类');
       await reloadCategories();
     } catch (e) {

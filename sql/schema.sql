@@ -151,3 +151,13 @@ create policy "recurring_bills_update_own" on public.recurring_bills
 drop policy if exists "recurring_bills_delete_own" on public.recurring_bills;
 create policy "recurring_bills_delete_own" on public.recurring_bills
   for delete using (auth.uid() = user_id);
+
+-- ========== 分类支持二级子分类 ==========
+-- 只支持两级（子分类的父分类必须是顶级分类），这个限制在前端做，数据库层面只保证不能指向自己。
+alter table public.categories
+  add column if not exists parent_id uuid references public.categories(id) on delete cascade;
+
+alter table public.categories drop constraint if exists categories_parent_not_self;
+alter table public.categories add constraint categories_parent_not_self check (parent_id is distinct from id);
+
+create index if not exists idx_categories_parent on public.categories (parent_id);

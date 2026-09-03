@@ -276,10 +276,13 @@
               <input type="text" name="name" placeholder="例如：宠物" required />
             </label>
             <label>类型
-              <select name="type">
+              <select name="type" id="category-type-select">
                 <option value="expense">支出</option>
                 <option value="income">收入</option>
               </select>
+            </label>
+            <label id="category-parent-label">父分类（支出分类可选）
+              <select name="parent_id" id="category-parent-select"></select>
             </label>
             <label>颜色
               <input type="color" name="color" value="#5c9ead" />
