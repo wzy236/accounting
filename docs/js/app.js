@@ -15,6 +15,7 @@ import {
   createAccount,
   deleteAccount,
   getAccountBalances,
+  adjustAccountBalance,
   listRecurringBills,
   createRecurringBill,
   updateRecurringBill,
@@ -342,7 +343,7 @@ function renderTransactionRow(t) {
     <td><select class="f-account account-select"></select></td>
     <td><input type="number" class="f-amount" step="0.01" min="0.01" value="${t.amount}" /></td>
     <td><input type="text" class="f-desc" value="${escapeHtml(t.description || '')}" /></td>
-    <td><span class="tag">${t.source === 'pdf_import' ? 'PDF导入' : t.source === 'recurring' ? '定时账单' : '手动'}</span></td>
+    <td><span class="tag">${{ pdf_import: 'PDF导入', recurring: '定时账单', adjustment: '余额调整' }[t.source] || '手动'}</span></td>
     <td class="row-actions"><button type="button" class="link-btn save-btn">保存</button></td>
     <td class="delete-cell"><button type="button" class="link-btn danger delete-btn">删除</button></td>
   `;
@@ -535,8 +536,25 @@ function renderAccountList(list) {
       <span class="swatch" style="background: ${escapeHtml(a.color)}"></span>
       <span class="cat-name">${escapeHtml(a.name)} <span class="tag">${a.type === 'credit_card' ? '信用卡' : '银行账户'}</span></span>
       <span class="balance ${balanceClass}">${fmt(a.balance)}</span>
+      <button type="button" class="link-btn adjust-balance-btn">调整余额</button>
       <button type="button" class="link-btn danger delete-acc-btn">删除</button>
     `;
+    li.querySelector('.adjust-balance-btn').addEventListener('click', async () => {
+      const input = prompt(`把「${a.name}」的余额调整为多少？（会自动补一笔差额的收入/支出记录）`, a.balance.toFixed(2));
+      if (input === null) return;
+      const target = parseFloat(input);
+      if (Number.isNaN(target)) {
+        showToast('请输入有效的数字', true);
+        return;
+      }
+      try {
+        const result = await adjustAccountBalance(a.id, a.balance, target);
+        showToast(result ? '已调整余额' : '余额没有变化');
+        await reloadAccounts();
+      } catch (e) {
+        showToast('调整失败：' + e.message, true);
+      }
+    });
     li.querySelector('.delete-acc-btn').addEventListener('click', async () => {
       if (!confirm('删除后该账户下的记录会变为不关联任何账户，确认删除？')) return;
       try {
