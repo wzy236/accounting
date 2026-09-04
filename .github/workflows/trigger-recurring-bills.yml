@@ -1,0 +1,32 @@
+name: Trigger recurring bills sweep
+
+# server/ 那个后端如果部署在会休眠的免费平台（比如 Render 免费 Web Service），内部的
+# node-cron 睡着的时候不会触发，这个 workflow 每天定时把它叫醒、触发一次定时账单扫描。
+# 如果后端部署在一直运行的服务器上，这个 workflow 不是必须的，但留着做兜底也没有坏处。
+#
+# 使用前需要在仓库 Settings -> Secrets and variables -> Actions 里配置：
+#   - Variables：RECURRING_BILLS_SERVER_URL（后端地址，例如 https://xxx.onrender.com）
+#   - Secrets：CRON_SECRET（跟后端 .env 里的 CRON_SECRET 必须一致）
+on:
+  schedule:
+    - cron: '20 0 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 触发后端的定时账单扫描接口
+        env:
+          SERVER_URL: ${{ vars.RECURRING_BILLS_SERVER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SERVER_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "还没配置 RECURRING_BILLS_SERVER_URL（repository variable）或 CRON_SECRET（repository secret），跳过。" >&2
+            echo "去 Settings -> Secrets and variables -> Actions 配置好之后这个 workflow 才会真正生效。" >&2
+            exit 1
+          fi
+          curl -sf -X POST "$SERVER_URL/api/recurring-bills/run" -H "x-cron-secret: $CRON_SECRET"
