@@ -16,6 +16,7 @@ import {
   deleteAccount,
   getAccountBalances,
   adjustAccountBalance,
+  createTransfer,
   listRecurringBills,
   createRecurringBill,
   updateRecurringBill,
@@ -23,6 +24,7 @@ import {
   generateDueRecurringTransactions,
 } from './api.js';
 import { parseStatementText } from './bankStatementParser.js';
+import { extractCandidatesFromCsv, extractCandidatesFromExcel } from './spreadsheetImport.js';
 
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
@@ -110,6 +112,17 @@ function refreshFormSelects() {
   }
   const parentSelect = document.getElementById('category-parent-select');
   if (parentSelect) populateParentCategorySelect(parentSelect);
+
+  const transferFrom = document.getElementById('transfer-from-select');
+  const transferTo = document.getElementById('transfer-to-select');
+  if (transferFrom && transferTo) {
+    const currentFrom = transferFrom.value;
+    const currentTo = transferTo.value;
+    populateAccountSelect(transferFrom, currentFrom);
+    populateAccountSelect(transferTo, currentTo);
+    transferFrom.options[0].textContent = '请选择账户';
+    transferTo.options[0].textContent = '请选择账户';
+  }
 }
 
 /* ================= 认证 ================= */
@@ -314,8 +327,9 @@ async function reloadTransactions() {
     return;
   }
 
-  const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  // 转账不算真正的收入/支出，只是钱在自己账户之间挪动，排除掉才不会让统计数字失真
+  const income = transactions.filter((t) => t.type === 'income' && t.source !== 'transfer').reduce((s, t) => s + Number(t.amount), 0);
+  const expense = transactions.filter((t) => t.type === 'expense' && t.source !== 'transfer').reduce((s, t) => s + Number(t.amount), 0);
   document.getElementById('summary-income').textContent = fmt(income);
   document.getElementById('summary-expense').textContent = fmt(expense);
   document.getElementById('summary-balance').textContent = fmt(income - expense);
@@ -343,7 +357,7 @@ function renderTransactionRow(t) {
     <td><select class="f-account account-select"></select></td>
     <td><input type="number" class="f-amount" step="0.01" min="0.01" value="${t.amount}" /></td>
     <td><input type="text" class="f-desc" value="${escapeHtml(t.description || '')}" /></td>
-    <td><span class="tag">${{ pdf_import: 'PDF导入', recurring: '定时账单', adjustment: '余额调整' }[t.source] || '手动'}</span></td>
+    <td><span class="tag">${{ pdf_import: 'PDF导入', recurring: '定时账单', adjustment: '余额调整', transfer: '转账' }[t.source] || '手动'}</span></td>
     <td class="row-actions"><button type="button" class="link-btn save-btn">保存</button></td>
     <td class="delete-cell"><button type="button" class="link-btn danger delete-btn">删除</button></td>
   `;
@@ -375,7 +389,10 @@ function renderTransactionRow(t) {
   });
 
   tr.querySelector('.delete-btn').addEventListener('click', async () => {
-    if (!confirm('确认删除这条记录？')) return;
+    const msg = t.source === 'transfer'
+      ? '这是一笔转账的其中一侧记录，删除只会删掉这一条，另一侧账户的记录不会自动删除，确认删除？'
+      : '确认删除这条记录？';
+    if (!confirm(msg)) return;
     try {
       await deleteTransaction(t.id);
       showToast('已删除');
@@ -589,6 +606,42 @@ function wireAccountForm() {
       await reloadAccounts();
     } catch (e) {
       showToast('添加失败：' + (e.data?.message?.includes('duplicate') ? '账户名已存在' : e.message), true);
+    }
+  });
+}
+
+function wireTransferForm() {
+  const form = document.getElementById('transfer-form');
+  form.querySelector('input[name="date"]').value = todayStr();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const fromId = fd.get('from_account_id');
+    const toId = fd.get('to_account_id');
+    if (!fromId || !toId) return;
+    if (fromId === toId) {
+      showToast('转出和转入不能是同一个账户', true);
+      return;
+    }
+    const fromAccount = accounts.find((a) => String(a.id) === fromId);
+    const toAccount = accounts.find((a) => String(a.id) === toId);
+    try {
+      await createTransfer({
+        date: fd.get('date'),
+        fromAccountId: fromId,
+        fromAccountName: fromAccount?.name || '',
+        toAccountId: toId,
+        toAccountName: toAccount?.name || '',
+        amount: parseFloat(fd.get('amount')),
+        description: (fd.get('description') || '').trim(),
+      });
+      form.reset();
+      form.querySelector('input[name="date"]').value = todayStr();
+      showToast('转账成功');
+      await reloadAccounts();
+    } catch (e) {
+      showToast('转账失败：' + e.message, true);
     }
   });
 }
@@ -838,6 +891,18 @@ function renderImportPreview() {
     `识别到 ${pendingImport.length} 条候选记录，请核对后确认导入。取消勾选可跳过某条记录。`;
 }
 
+/** 按文件后缀分发到对应的解析器，统一返回候选交易记录数组。 */
+async function extractCandidatesFromFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    return extractCandidatesFromCsv(await file.text());
+  }
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    return extractCandidatesFromExcel(await file.arrayBuffer());
+  }
+  return parseStatementText(await extractTextFromPdf(await file.arrayBuffer()));
+}
+
 function wireImportView() {
   document.getElementById('pdf-file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -846,11 +911,9 @@ function wireImportView() {
     if (!file) return;
     document.getElementById('pdf-parsing-hint').hidden = false;
     try {
-      const buf = await file.arrayBuffer();
-      const text = await extractTextFromPdf(buf);
-      const candidates = parseStatementText(text);
+      const candidates = await extractCandidatesFromFile(file);
       if (candidates.length === 0) {
-        errorEl.textContent = '未能从该 PDF 中识别出任何交易记录，可能格式不受支持，请检查文件或尝试其他对账单。';
+        errorEl.textContent = '未能从该文件中识别出任何交易记录，可能格式不受支持，请检查文件或尝试其他对账单。';
         errorEl.hidden = false;
         return;
       }
@@ -859,7 +922,7 @@ function wireImportView() {
       document.getElementById('import-upload-section').hidden = true;
       document.getElementById('import-preview-section').hidden = false;
     } catch (err) {
-      errorEl.textContent = '解析 PDF 失败：' + err.message;
+      errorEl.textContent = '解析文件失败：' + err.message;
       errorEl.hidden = false;
     } finally {
       document.getElementById('pdf-parsing-hint').hidden = true;
@@ -907,6 +970,7 @@ function init() {
   wireConfigForm();
   wireTransactionForm();
   wireAccountForm();
+  wireTransferForm();
   wireBillForm();
   wireCategoryForm();
   wireChartsView();
