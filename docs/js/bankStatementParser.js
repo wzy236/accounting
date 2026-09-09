@@ -52,6 +52,36 @@ function extractAmounts(line) {
     .filter(Boolean);
 }
 
+/** 从一行文字里识别出一条候选交易（日期 + 金额 + 描述），识别不出来返回 null。 */
+export function parseLine(line) {
+  const dateMatch = extractDate(line);
+  if (!dateMatch) return null;
+
+  const amounts = extractAmounts(line);
+  if (amounts.length === 0) return null;
+
+  const realAmounts = amounts.filter(
+    (a) => a.index < dateMatch.index || a.index >= dateMatch.index + dateMatch.matchText.length
+  );
+  if (realAmounts.length === 0) return null;
+
+  const amountInfo = realAmounts[0];
+  if (amountInfo.value === 0) return null;
+
+  const dateEnd = dateMatch.index + dateMatch.matchText.length;
+  const descStart = Math.min(dateEnd, amountInfo.index);
+  const descEnd = Math.max(dateEnd, amountInfo.index);
+  let description = line.slice(descStart, descEnd).replace(/^[\s,:|.-]+|[\s,:|.-]+$/g, '');
+  if (!description) description = line.slice(0, 60);
+
+  return {
+    date: dateMatch.dateStr,
+    description: description.slice(0, 200),
+    amount: amountInfo.value,
+    type: amountInfo.negative ? 'expense' : 'income',
+  };
+}
+
 /**
  * 从对账单纯文本中提取候选交易记录（启发式规则，非精确解析，需人工核对）。
  * 每行若能同时匹配到日期和金额，则视为一条候选交易；
@@ -63,36 +93,5 @@ export function parseStatementText(text) {
     .map((l) => l.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 
-  const candidates = [];
-
-  for (const line of lines) {
-    const dateMatch = extractDate(line);
-    if (!dateMatch) continue;
-
-    const amounts = extractAmounts(line);
-    if (amounts.length === 0) continue;
-
-    const realAmounts = amounts.filter(
-      (a) => a.index < dateMatch.index || a.index >= dateMatch.index + dateMatch.matchText.length
-    );
-    if (realAmounts.length === 0) continue;
-
-    const amountInfo = realAmounts[0];
-    if (amountInfo.value === 0) continue;
-
-    const dateEnd = dateMatch.index + dateMatch.matchText.length;
-    const descStart = Math.min(dateEnd, amountInfo.index);
-    const descEnd = Math.max(dateEnd, amountInfo.index);
-    let description = line.slice(descStart, descEnd).replace(/^[\s,:|.-]+|[\s,:|.-]+$/g, '');
-    if (!description) description = line.slice(0, 60);
-
-    candidates.push({
-      date: dateMatch.dateStr,
-      description: description.slice(0, 200),
-      amount: amountInfo.value,
-      type: amountInfo.negative ? 'expense' : 'income',
-    });
-  }
-
-  return candidates;
+  return lines.map(parseLine).filter(Boolean);
 }

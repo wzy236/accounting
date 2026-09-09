@@ -1,6 +1,6 @@
 # 记账本
 
-一个纯静态的个人记账网站：记录每日收支、自定义分类、饼图统计、支持导入银行 PDF 对账单。可以直接托管在 GitHub Pages，安装到手机桌面当 PWA 用。
+一个纯静态的个人记账网站：记录每日收支、自定义分类、饼图统计、支持导入银行 PDF/Excel/CSV 对账单。可以直接托管在 GitHub Pages，安装到手机桌面当 PWA 用。
 
 ## 技术栈
 
@@ -62,17 +62,18 @@ python3 -m http.server 8080 --directory docs
 - 自定义收入/支出分类（含颜色标记），首次登录自动写入一套默认分类；支出分类可以再加一层子分类
 - 按月查看收支明细、编辑、删除，可关联到某个账户
 - 按月饼图统计（支出/收入分别按分类展示）
-- 上传银行 PDF 对账单，浏览器本地用 pdf.js 提取文本并识别候选交易记录，预览核对后批量导入
+- 上传银行/信用卡对账单（PDF、Excel .xlsx/.xls 或 CSV），浏览器本地识别候选交易记录，预览核对后批量导入
 - **账户管理**：添加多个银行账户/信用卡，自动按「初始余额 + 关联交易的收支」算出当前余额（信用卡欠款显示为负数）；随时可以"调整余额"，系统会自动补一笔差额的收入/支出记录，而不是直接改数字，保证余额变动都能在记账记录里查到
+- **转账**：在自己的账户之间转移资金（比如还信用卡欠款），记成一对收入/支出记录但不计入月度收入/支出统计和饼图，只影响账户余额
 - **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），到期后打开网站会自动补记一笔交易并计入账户余额——纯静态网站没有服务器定时任务，靠打开网站时"补课"触发，不精确到具体时间点但不会漏
 - 离线可用 app 外壳（Service Worker 缓存静态资源，network-first 保证更新立即生效），可安装为 PWA
 
-## PDF 导入说明
+## 对账单导入说明
 
-PDF 解析（`docs/js/bankStatementParser.js`）基于常见对账单格式的启发式规则（识别行内的日期 + 金额），全部在浏览器本地完成，**不保证 100% 准确**，尤其是：
+支持 PDF、Excel（`.xlsx`/`.xls`）、CSV 三种格式，识别规则是同一套（`docs/js/bankStatementParser.js` 里的 `parseLine`）：PDF 先用 pdf.js 把每页文字按行提取出来，Excel/CSV（`docs/js/spreadsheetImport.js`，Excel 解析用本地 vendor 的 SheetJS）则是把每一行的单元格拼成一句话，再统一识别行内的日期 + 金额。全部在浏览器本地完成，不会上传到任何服务器，但**不保证 100% 准确**，尤其是：
 
 - 日期格式支持 `YYYY-MM-DD`、`MM/DD/YYYY`、`YYYY年MM月DD日`
-- 金额必须包含两位小数（如 `12.34`），带千分位逗号、`$`/`¥` 符号、括号或前后负号均可识别为负数（支出）
+- 金额必须包含两位小数（如 `12.34`），带千分位逗号、`$`/`¥` 符号、括号或前后负号均可识别为负数（支出）；Excel 里数字单元格如果显示成 `9000`（没有 `.00`），会先自动补成两位小数再识别
 - 若一行有多个金额（例如金额 + 余额两列），默认取第一个作为交易金额
 
 导入前会展示预览表格，可逐条修改日期/金额/类型/分类/描述，或取消勾选跳过某条记录，确认后才会写入数据库。
@@ -86,10 +87,11 @@ docs/                   # GitHub Pages 发布目录
   js/
     config.js            # Supabase 项目配置
     supabaseClient.js     # Auth + REST 请求封装（纯 fetch）
-    api.js                 # categories/transactions 业务接口
-    bankStatementParser.js # PDF 文本 -> 候选交易记录
-    app.js                  # 页面逻辑、路由、渲染
-  vendor/                # 本地打包的 chart.js、pdf.js（不依赖 CDN）
+    api.js                 # categories/transactions/accounts/recurring_bills 业务接口
+    bankStatementParser.js # 单行文字 -> 候选交易记录（PDF/Excel/CSV 导入共用）
+    spreadsheetImport.js    # CSV/Excel -> 按行拼文字，交给 bankStatementParser 识别
+    app.js                    # 页面逻辑、路由、渲染
+  vendor/                # 本地打包的 chart.js、pdf.js、SheetJS（不依赖 CDN）
   icons/                 # PWA 图标
   manifest.json
   sw.js                  # Service Worker
