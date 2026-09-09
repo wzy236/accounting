@@ -16,11 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 从 docs/js/config.js 读取当前 Supabase 项目配置
+      - name: 从 legacy-static/js/config.js 读取当前 Supabase 项目配置
         id: config
         run: |
-          url=$(grep -oP "(?<=DEFAULT_SUPABASE_URL = ')[^']+" docs/js/config.js)
-          key=$(grep -oP "(?<=DEFAULT_SUPABASE_ANON_KEY = ')[^']+" docs/js/config.js)
+          url=$(grep -oP "(?<=DEFAULT_SUPABASE_URL = ')[^']+" legacy-static/js/config.js)
+          key=$(grep -oP "(?<=DEFAULT_SUPABASE_ANON_KEY = ')[^']+" legacy-static/js/config.js)
           if [ -z "$url" ] || [ -z "$key" ]; then
             echo "没能从 config.js 解析出 URL/key，检查一下文件格式是否变了" >&2
             exit 1

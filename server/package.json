@@ -1,0 +1,13 @@
+{
+  "name": "accounting-server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "sweep": "node src/runOnce.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5"
+  }
+}

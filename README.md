@@ -1,20 +1,13 @@
 # 记账本
 
-一个纯静态的个人记账网站：记录每日收支、自定义分类、饼图统计、支持导入银行 PDF/Excel/CSV 对账单。可以直接托管在 GitHub Pages，安装到手机桌面当 PWA 用。
+一个个人记账网站：记录每日收支、自定义分类（支持子分类）、多账户余额、账户间转账、按天/周/月的定时账单、饼图统计、支持导入银行 PDF/Excel/CSV 对账单。数据存 Supabase，登录后每个人只能看到自己的账本。
 
-## 技术栈
+## 这几个目录是什么关系
 
-| 层 | 技术 | 说明 |
-| --- | --- | --- |
-| 托管 | GitHub Pages | 静态文件，从 `docs/` 目录部署 |
-| 数据库 / 认证 | Supabase | PostgreSQL + Auth，前端直接用 `fetch` 调 REST API，不用 SDK |
-| 前端 | 纯 HTML + CSS + JS | 无框架，`docs/index.html` 单页应用，hash 路由 |
-| 图表 | Chart.js | 本地 vendor（`docs/vendor/chart.umd.min.js`），不依赖 CDN |
-| PDF 解析 | pdf.js | 本地 vendor，浏览器端解析，PDF 不会上传到任何服务器 |
-| 离线 | Service Worker | app shell 和 Supabase 请求都走 network-first，在线时始终拿最新版本，离线时才退回缓存 |
-| PWA | manifest.json | 可安装到手机/桌面 |
-
-> Supabase 免费版项目连续 7 天没有 API 请求会自动暂停（登录时报 `Failed to fetch` 大概率就是这个），仓库里的 [`.github/workflows/keep-supabase-awake.yml`](.github/workflows/keep-supabase-awake.yml) 会每 3 天自动请求一次 Supabase 接口防止暂停。如果项目已经被暂停了，还是要先去 Supabase 后台手动点一次 **Restore** 才能恢复。
+- **[`web/`](web)** —— 现在的主力前端，React（Vite 打包）。界面重写过，但数据层原理没变：浏览器直连 Supabase，登录和数据权限都靠 Supabase Auth + 数据库的 **Row Level Security** 保证，没有经过任何后端转发
+- **[`legacy-static/`](legacy-static)** —— 早期的纯 HTML/CSS/原生 JS 版本，功能上跟 `web/` 对等，保留下来当参考/备用，目前没有部署
+- **[`server/`](server)** —— 只做一件浏览器做不到的事：**定时账单真正按时自动生成**。没有常驻服务器，靠 GitHub Actions 定时跑一个脚本，具体看 [`server/README.md`](server/README.md)
+- **[`sql/schema.sql`](sql/schema.sql)** —— 两套前端共用同一份数据库结构
 
 ## 上线步骤
 
@@ -22,7 +15,7 @@
 
 打开你的 Supabase 项目 → **SQL Editor** → 新建查询 → 粘贴 [`sql/schema.sql`](sql/schema.sql) 的全部内容 → Run。
 
-这一步会创建 `categories`（分类）、`transactions`（交易记录）、`accounts`（银行账户/信用卡）、`recurring_bills`（定时账单）四张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。已经跑过旧版 `schema.sql` 的项目重新执行一次也是安全的，会自动补上新增的表和列。
+这一步会创建 `categories`（分类）、`transactions`（交易记录）、`accounts`（银行账户/信用卡）、`recurring_bills`（定时账单）四张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。重复执行是安全的，已经跑过旧版的项目再跑一次会自动补上新增的表和列。
 
 ### 2. 确认 Auth 邮箱设置
 
@@ -32,32 +25,33 @@ Supabase 项目 → **Authentication → Providers → Email**：
 
 ### 3. 配置前端连接的 Supabase 项目
 
-`docs/js/config.js` 里已经填好了默认项目的 URL 和 anon/publishable key。如果要换成自己的 Supabase 项目，不需要改代码——打开网站，登录页底部或登录后顶部导航都有「Supabase 设置」入口，直接粘贴自己项目的 URL + key，保存后只存在当前浏览器的 `localStorage` 里，不影响默认配置和其他访问者。也可以直接改 `docs/js/config.js` 里的默认值：
-
-```js
-const DEFAULT_SUPABASE_URL = 'https://xxxx.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'xxxx';
-```
+`web/src/lib/config.js` 里已经填好了默认项目的 URL 和 anon/publishable key。如果要换成自己的 Supabase 项目，不需要改代码——打开网站，登录页底部或登录后顶部导航都有「Supabase 设置」入口，直接粘贴自己项目的 URL + key，保存后只存在当前浏览器的 `localStorage` 里，不影响默认配置和其他访问者。也可以直接改 `web/src/lib/config.js` 里的默认值。
 
 > anon/publishable key 设计上就是公开的（本来就会被打进前端代码里），真正的数据安全依赖第 1 步开启的 RLS 策略，**千万不要把 `service_role` key 放到前端**。
 
-### 4. 开启 GitHub Pages
+### 4. 开启 GitHub Pages（部署 `web/`）
 
-仓库 Settings → Pages → Source 选择 `Deploy from a branch` → Branch 选 `main`（或本 PR 合并后所在分支）、目录选 `/docs` → Save。几分钟后即可通过 `https://<你的用户名>.github.io/<仓库名>/` 访问。
+跟以前"选个分支和目录"不一样，现在是让 GitHub Actions 帮你构建再发布：
 
-### 本地预览
+1. 仓库 **Settings → Pages → Build and deployment → Source**，选 **GitHub Actions**（不是 `Deploy from a branch`）
+2. 推送/合并到 `main` 分支时，[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) 会自动构建 `web/` 并发布，几分钟后就能通过 `https://<你的用户名>.github.io/<仓库名>/` 访问
+3. 也可以去仓库 **Actions** 标签页手动点这个 workflow 的 **Run workflow** 立刻触发一次
 
-不需要装任何依赖，随便起一个静态文件服务器指向 `docs/` 目录即可，例如：
+### 5. 配置定时账单的真实定时任务
+
+见 [`server/README.md`](server/README.md)——需要在仓库 Secrets 里配两个值（Supabase URL + service_role key）。这一步是可选的：不配的话，定时账单仍然会在你打开网站时自动"补课"，只是不会精确到具体时间点。
+
+### 本地开发
 
 ```bash
-python3 -m http.server 8080 --directory docs
+cd web
+npm install
+npm run dev
 ```
-
-然后打开 `http://localhost:8080`。（直接用 `file://` 双击打开 `index.html` 也基本能用，但 Service Worker 在部分浏览器下需要 http(s) 协议才能注册。）
 
 ## 功能
 
-- 邮箱注册 / 登录（Supabase Auth），每个用户独立账本，数据存 Supabase 的 Postgres
+- 邮箱注册 / 登录（Supabase Auth），每个用户独立账本
 - 手动记录收入/支出，日期、金额、备注
 - 自定义收入/支出分类（含颜色标记），首次登录自动写入一套默认分类；支出分类可以再加一层子分类
 - 按月查看收支明细、编辑、删除，可关联到某个账户
@@ -65,12 +59,16 @@ python3 -m http.server 8080 --directory docs
 - 上传银行/信用卡对账单（PDF、Excel .xlsx/.xls 或 CSV），浏览器本地识别候选交易记录，预览核对后批量导入
 - **账户管理**：添加多个银行账户/信用卡，自动按「初始余额 + 关联交易的收支」算出当前余额（信用卡欠款显示为负数）；随时可以"调整余额"，系统会自动补一笔差额的收入/支出记录，而不是直接改数字，保证余额变动都能在记账记录里查到
 - **转账**：在自己的账户之间转移资金（比如还信用卡欠款），记成一对收入/支出记录但不计入月度收入/支出统计和饼图，只影响账户余额
-- **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），到期后打开网站会自动补记一笔交易并计入账户余额——纯静态网站没有服务器定时任务，靠打开网站时"补课"触发，不精确到具体时间点但不会漏
-- 离线可用 app 外壳（Service Worker 缓存静态资源，network-first 保证更新立即生效），可安装为 PWA
+- **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），[`server/`](server) 里的 GitHub Actions 定时任务会按真实时间表自动生成交易；打开网站时也会顺手补一次，双重保险
+- 可安装为 PWA，离线也能打开 app 外壳
+
+## Supabase 免费版会自动暂停
+
+Supabase 免费版项目连续 7 天没有 API 请求会自动暂停（打开网站报 `Failed to fetch` 大概率就是这个）。仓库里的 [`.github/workflows/keep-supabase-awake.yml`](.github/workflows/keep-supabase-awake.yml) 会每 3 天自动请求一次 Supabase 接口防止暂停。如果项目已经被暂停了，还是要先去 Supabase 后台手动点一次 **Restore** 才能恢复。
 
 ## 对账单导入说明
 
-支持 PDF、Excel（`.xlsx`/`.xls`）、CSV 三种格式，识别规则是同一套（`docs/js/bankStatementParser.js` 里的 `parseLine`）：PDF 先用 pdf.js 把每页文字按行提取出来，Excel/CSV（`docs/js/spreadsheetImport.js`，Excel 解析用本地 vendor 的 SheetJS）则是把每一行的单元格拼成一句话，再统一识别行内的日期 + 金额。全部在浏览器本地完成，不会上传到任何服务器，但**不保证 100% 准确**，尤其是：
+支持 PDF、Excel（`.xlsx`/`.xls`）、CSV 三种格式，识别规则是同一套（`bankStatementParser.js` 里的 `parseLine`）：PDF 先提取每页文字按行处理，Excel/CSV 则是把每一行的单元格拼成一句话，再统一识别行内的日期 + 金额。全部在浏览器本地完成，不会上传到任何服务器，但**不保证 100% 准确**，尤其是：
 
 - 日期格式支持 `YYYY-MM-DD`、`MM/DD/YYYY`、`YYYY年MM月DD日`
 - 金额必须包含两位小数（如 `12.34`），带千分位逗号、`$`/`¥` 符号、括号或前后负号均可识别为负数（支出）；Excel 里数字单元格如果显示成 `9000`（没有 `.00`），会先自动补成两位小数再识别
@@ -81,19 +79,17 @@ python3 -m http.server 8080 --directory docs
 ## 目录结构
 
 ```
-docs/                   # GitHub Pages 发布目录
-  index.html            # 单页应用：登录/注册 + 记账/分类/图表/导入
-  css/style.css
-  js/
-    config.js            # Supabase 项目配置
-    supabaseClient.js     # Auth + REST 请求封装（纯 fetch）
-    api.js                 # categories/transactions/accounts/recurring_bills 业务接口
-    bankStatementParser.js # 单行文字 -> 候选交易记录（PDF/Excel/CSV 导入共用）
-    spreadsheetImport.js    # CSV/Excel -> 按行拼文字，交给 bankStatementParser 识别
-    app.js                    # 页面逻辑、路由、渲染
-  vendor/                # 本地打包的 chart.js、pdf.js、SheetJS（不依赖 CDN）
-  icons/                 # PWA 图标
-  manifest.json
-  sw.js                  # Service Worker
+web/                    # React 前端（现在的部署目标）
+  src/
+    lib/                # Supabase client、业务接口、格式化工具、PDF/Excel/CSV 解析
+    components/         # 复用组件
+    pages/              # 各个页面
+  vite.config.js        # vite-plugin-pwa 配置
+legacy-static/          # 早期纯 HTML/CSS/原生 JS 版本，保留参考，未部署
+server/                 # 定时账单真实定时任务用到的脚本
 sql/schema.sql          # Supabase 建表 + RLS 策略
+.github/workflows/
+  deploy-pages.yml         # 构建 web/ 发布到 GitHub Pages
+  run-recurring-bills.yml  # 定时跑 server/ 的账单扫描脚本
+  keep-supabase-awake.yml  # 防止 Supabase 项目被自动暂停
 ```
