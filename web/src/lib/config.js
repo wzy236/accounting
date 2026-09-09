@@ -1,5 +1,5 @@
 // Supabase 项目配置：默认项目 + 每个浏览器可选的自定义覆盖（存 localStorage）。
-// 跟原来纯静态版本（docs/js/config.js）的设计完全一致，方便迁移。
+// 跟 legacy-static/js/config.js（原来的纯静态版本）设计完全一致，方便迁移。
 const DEFAULT_SUPABASE_URL = 'https://hgdtukyorpngghgkelhz.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_sPMeGgA4gKEh_yI2J7H9qA__0LD6X-g';
 

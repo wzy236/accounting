@@ -5,7 +5,7 @@ import { updateTransaction, deleteTransaction } from '../lib/api.js';
 import CategorySelect from './CategorySelect.jsx';
 import AccountSelect from './AccountSelect.jsx';
 
-const SOURCE_LABEL = { pdf_import: 'PDF导入', recurring: '定时账单', adjustment: '余额调整' };
+const SOURCE_LABEL = { pdf_import: 'PDF导入', recurring: '定时账单', adjustment: '余额调整', transfer: '转账' };
 
 export default function TransactionRow({ t, categories, accounts, onChanged }) {
   const { client } = useSupabase();
@@ -35,7 +35,10 @@ export default function TransactionRow({ t, categories, accounts, onChanged }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm('确认删除这条记录？')) return;
+    const msg = t.source === 'transfer'
+      ? '这是一笔转账的其中一侧记录，删除只会删掉这一条，另一侧账户的记录不会自动删除，确认删除？'
+      : '确认删除这条记录？';
+    if (!window.confirm(msg)) return;
     try {
       await deleteTransaction(client, t.id);
       showToast('已删除');

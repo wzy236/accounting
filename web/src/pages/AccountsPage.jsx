@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/ToastContext.jsx';
 import { useData } from '../lib/DataContext.jsx';
-import { createAccount, deleteAccount, adjustAccountBalance } from '../lib/api.js';
-import { fmt } from '../lib/format.js';
+import { createAccount, deleteAccount, adjustAccountBalance, createTransfer } from '../lib/api.js';
+import { fmt, todayStr } from '../lib/format.js';
+import AccountSelect from '../components/AccountSelect.jsx';
 
 export default function AccountsPage() {
   const { client } = useSupabase();
@@ -14,6 +15,12 @@ export default function AccountsPage() {
   const [type, setType] = useState('bank');
   const [initialBalance, setInitialBalance] = useState('0');
   const [color, setColor] = useState('#3d5a80');
+
+  const [fromAccountId, setFromAccountId] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferDate, setTransferDate] = useState(todayStr());
+  const [transferDescription, setTransferDescription] = useState('');
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -45,6 +52,37 @@ export default function AccountsPage() {
       refreshAccounts();
     } catch (e) {
       showToast('调整失败：' + e.message, true);
+    }
+  }
+
+  async function handleTransfer(e) {
+    e.preventDefault();
+    if (!fromAccountId || !toAccountId) return;
+    if (fromAccountId === toAccountId) {
+      showToast('转出和转入不能是同一个账户', true);
+      return;
+    }
+    const fromAccount = accounts.find((a) => String(a.id) === fromAccountId);
+    const toAccount = accounts.find((a) => String(a.id) === toAccountId);
+    try {
+      await createTransfer(client, {
+        date: transferDate,
+        fromAccountId,
+        fromAccountName: fromAccount?.name || '',
+        toAccountId,
+        toAccountName: toAccount?.name || '',
+        amount: parseFloat(transferAmount),
+        description: transferDescription.trim(),
+      });
+      setFromAccountId('');
+      setToAccountId('');
+      setTransferAmount('');
+      setTransferDate(todayStr());
+      setTransferDescription('');
+      showToast('转账成功');
+      refreshAccounts();
+    } catch (e) {
+      showToast('转账失败：' + e.message, true);
     }
   }
 
@@ -106,6 +144,31 @@ export default function AccountsPage() {
           })
         )}
       </ul>
+
+      <section className="add-form-section">
+        <h2>转账</h2>
+        <p className="hint">在自己的账户之间转移资金（比如还信用卡欠款），不计入收入/支出统计，只会影响账户余额。</p>
+        <form onSubmit={handleTransfer} className="tx-form">
+          <div className="tx-form-row">
+            <label>从
+              <AccountSelect accounts={accounts} value={fromAccountId} onChange={setFromAccountId} />
+            </label>
+            <label>到
+              <AccountSelect accounts={accounts} value={toAccountId} onChange={setToAccountId} />
+            </label>
+            <label>金额
+              <input type="number" step="0.01" min="0.01" required value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} />
+            </label>
+            <label>日期
+              <input type="date" required value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
+            </label>
+            <label className="grow">备注
+              <input type="text" placeholder="选填" value={transferDescription} onChange={(e) => setTransferDescription(e.target.value)} />
+            </label>
+            <button type="submit" className="btn primary">转账</button>
+          </div>
+        </form>
+      </section>
     </section>
   );
 }

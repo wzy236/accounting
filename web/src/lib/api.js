@@ -97,11 +97,11 @@ export async function createTransactionsBulk(client, rows) {
   return unwrap(await client.from('transactions').insert(rows).select());
 }
 
-/** 按分类聚合某月的收入/支出总额，供饼图使用（客户端聚合，数据量不大够用）。 */
+/** 按分类聚合某月的收入/支出总额，供饼图使用（客户端聚合，数据量不大够用）。转账不算真正的收支，排除掉。 */
 export function aggregateByCategory(transactions, type) {
   const totals = new Map();
   for (const t of transactions) {
-    if (t.type !== type) continue;
+    if (t.type !== type || t.source === 'transfer') continue;
     const key = t.category_id || 'none';
     const name = t.category_name || '未分类';
     const color = t.category_color || '#8d99ae';
@@ -163,6 +163,31 @@ export async function adjustAccountBalance(client, accountId, currentBalance, ta
     description: '余额调整',
     source: 'adjustment',
   });
+}
+
+/**
+ * 账户间转账：记一对交易（源账户支出 + 目标账户收入），source 都标成 'transfer'。
+ * 两条记录用一次批量插入发出去，数据库那边是同一条 INSERT 语句，不会出现只写成功一半的情况。
+ * 转账不算真正的收入/支出，月度统计和饼图里会把 source: 'transfer' 的记录排除掉。
+ */
+export async function createTransfer(client, { date, fromAccountId, fromAccountName, toAccountId, toAccountName, amount, description }) {
+  const note = description ? `：${description}` : '';
+  return createTransactionsBulk(client, [
+    {
+      date, type: 'expense', amount,
+      account_id: fromAccountId,
+      category_id: null,
+      description: `转账到「${toAccountName}」${note}`,
+      source: 'transfer',
+    },
+    {
+      date, type: 'income', amount,
+      account_id: toAccountId,
+      category_id: null,
+      description: `转账自「${fromAccountName}」${note}`,
+      source: 'transfer',
+    },
+  ]);
 }
 
 /* ================= 定时账单 ================= */

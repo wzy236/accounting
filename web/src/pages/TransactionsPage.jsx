@@ -60,8 +60,9 @@ export default function TransactionsPage() {
     }
   }
 
-  const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  // 转账不算真正的收入/支出，只是钱在自己账户之间挪动，排除掉才不会让统计数字失真
+  const income = transactions.filter((t) => t.type === 'income' && t.source !== 'transfer').reduce((s, t) => s + Number(t.amount), 0);
+  const expense = transactions.filter((t) => t.type === 'expense' && t.source !== 'transfer').reduce((s, t) => s + Number(t.amount), 0);
 
   return (
     <section>

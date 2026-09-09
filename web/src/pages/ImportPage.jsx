@@ -6,8 +6,21 @@ import { useData } from '../lib/DataContext.jsx';
 import { createTransactionsBulk } from '../lib/api.js';
 import { extractTextFromPdf } from '../lib/pdfExtract.js';
 import { parseStatementText } from '../lib/bankStatementParser.js';
+import { extractCandidatesFromCsv, extractCandidatesFromExcel } from '../lib/spreadsheetImport.js';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
+
+/** 按文件后缀分发到对应的解析器，统一返回候选交易记录数组。 */
+async function extractCandidatesFromFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    return extractCandidatesFromCsv(await file.text());
+  }
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    return extractCandidatesFromExcel(await file.arrayBuffer());
+  }
+  return parseStatementText(await extractTextFromPdf(await file.arrayBuffer()));
+}
 
 export default function ImportPage() {
   const { client } = useSupabase();
@@ -32,16 +45,14 @@ export default function ImportPage() {
     if (!file) return;
     setParsing(true);
     try {
-      const buf = await file.arrayBuffer();
-      const text = await extractTextFromPdf(buf);
-      const candidates = parseStatementText(text);
+      const candidates = await extractCandidatesFromFile(file);
       if (candidates.length === 0) {
-        setError('未能从该 PDF 中识别出任何交易记录，可能格式不受支持，请检查文件或尝试其他对账单。');
+        setError('未能从该文件中识别出任何交易记录，可能格式不受支持，请检查文件或尝试其他对账单。');
         return;
       }
       setRows(candidates.map((c) => ({ ...c, include: true, category_id: '', account_id: '' })));
     } catch (err) {
-      setError('解析 PDF 失败：' + err.message);
+      setError('解析文件失败：' + err.message);
     } finally {
       setParsing(false);
     }
@@ -82,19 +93,19 @@ export default function ImportPage() {
 
   return (
     <section>
-      <h1>📥 导入银行 PDF 对账单</h1>
+      <h1>📥 导入对账单</h1>
       {error && <p className="error">{error}</p>}
 
       {!rows ? (
         <section className="add-form-section">
           <p className="hint">
-            支持上传银行/信用卡对账单 PDF，系统会在你的浏览器本地解析每一行的日期、描述和金额（不会把 PDF 上传到任何服务器）。
+            支持上传银行/信用卡对账单的 PDF、Excel（.xlsx/.xls）或 CSV 文件，系统会在你的浏览器本地解析每一行的日期、描述和金额（不会上传到任何服务器）。
             解析基于常见格式的启发式规则，<strong>并非 100% 准确</strong>，导入前你可以在预览表格里逐条核对、修改或取消勾选。
           </p>
-          <label>选择 PDF 文件
-            <input ref={fileInputRef} type="file" accept="application/pdf" onChange={handleFileChange} />
+          <label>选择对账单文件（PDF / Excel / CSV）
+            <input ref={fileInputRef} type="file" accept="application/pdf,.csv,text/csv,.xlsx,.xls" onChange={handleFileChange} />
           </label>
-          {parsing && <p className="hint">正在解析 PDF…</p>}
+          {parsing && <p className="hint">正在解析文件…</p>}
         </section>
       ) : (
         <section>
