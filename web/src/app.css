@@ -213,6 +213,24 @@ body {
 button.list-row, a.list-row { cursor: pointer; }
 button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0); }
 .list-row.sub { padding-left: 36px; }
+
+/* 分类行：左边整块可点（编辑），右边是 + 和 ⋮ 按钮 */
+.category-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.list-row:has(.category-main) { padding-top: 6px; padding-bottom: 6px; }
+.list-row:has(.category-main:hover) { background: var(--mantine-color-gray-0); }
 .list-row-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .empty-state { padding: 36px 16px; text-align: center; color: var(--mantine-color-gray-5); font-size: 14px; }
