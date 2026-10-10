@@ -38,6 +38,10 @@ export async function createCategory(client, { name, type, color, parent_id }) {
   return unwrap(await client.from('categories').insert({ name, type, color, parent_id: parent_id || null }).select());
 }
 
+export async function updateCategory(client, id, fields) {
+  return unwrap(await client.from('categories').update(fields).eq('id', id).select());
+}
+
 export async function deleteCategory(client, id) {
   return unwrap(await client.from('categories').delete().eq('id', id));
 }
