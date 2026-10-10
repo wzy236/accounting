@@ -98,6 +98,7 @@ function EditAccountForm({ account, onDone }) {
   const { client } = useSupabase();
   const showToast = useToast();
   const [name, setName] = useState(account.name);
+  const [type, setType] = useState(account.type);
   const [color, setColor] = useState(account.color);
   const [currency, setCurrency] = useState(account.currency || HOME_CURRENCY);
   const [error, setError] = useState('');
@@ -109,6 +110,7 @@ function EditAccountForm({ account, onDone }) {
     if (!trimmed) return;
     const fields = {};
     if (trimmed !== account.name) fields.name = trimmed;
+    if (type !== account.type) fields.type = type;
     if (color !== account.color) fields.color = color;
     if (currency !== (account.currency || HOME_CURRENCY)) fields.currency = currency;
     if (Object.keys(fields).length === 0) {
@@ -132,6 +134,12 @@ function EditAccountForm({ account, onDone }) {
     <form onSubmit={handleSubmit}>
       <Stack gap="md">
         <TextInput label="名称" required value={name} onChange={(e) => setName(e.target.value)} error={error} data-autofocus />
+        <SegmentedControl
+          fullWidth
+          data={[{ label: '银行账户', value: 'bank' }, { label: '信用卡', value: 'credit_card' }]}
+          value={type}
+          onChange={setType}
+        />
         <CurrencySelect
           value={currency}
           onChange={setCurrency}

@@ -5,6 +5,18 @@ export function yearlyAmount(bill) {
   return Number(bill.amount) * (TIMES_PER_YEAR[bill.frequency] || 0);
 }
 
+/** 启用中的定时账单按“月均 / 每年”折算成金额，给分类饼图用（字段跟交易记录一样）。 */
+export function billsAsAmounts(bills, period) {
+  return bills
+    .filter((b) => b.active)
+    .map((b) => ({
+      type: b.type,
+      category_id: b.category_id,
+      source: 'recurring',
+      amount: period === 'yearly' ? yearlyAmount(b) : yearlyAmount(b) / 12,
+    }));
+}
+
 /** 只按启用中的定时账单估算固定收支：每年合计，月均 = 每年 ÷ 12。 */
 export function recurringTotals(bills) {
   let income = 0;
