@@ -31,6 +31,12 @@ jobs:
 
       - name: 请求一次 Supabase REST API
         run: |
-          curl -sf "${{ steps.config.outputs.url }}/rest/v1/categories?select=id&limit=1" \
-            -H "apikey: ${{ steps.config.outputs.key }}" \
-            -o /dev/null
+          status=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            "${{ steps.config.outputs.url }}/rest/v1/categories?select=id&limit=1" \
+            -H "apikey: ${{ steps.config.outputs.key }}")
+          echo "HTTP status: $status"
+          if [ "$status" -ge 400 ]; then
+            echo "响应内容："
+            cat /tmp/resp.json
+            exit 1
+          fi
