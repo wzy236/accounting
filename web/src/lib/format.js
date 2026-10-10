@@ -16,6 +16,10 @@ export function fmt(n) {
   return `${sign}CA$${abs}`;
 }
 
+export function balanceClass(n) {
+  return n > 0 ? 'positive' : n < 0 ? 'negative' : '';
+}
+
 /** 把一组分类按“顶级分类 -> 紧跟它的子分类”的顺序展开，用于下拉菜单和列表展示。 */
 export function buildCategoryTree(list) {
   const byName = (a, b) => a.name.localeCompare(b.name);

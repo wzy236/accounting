@@ -53,6 +53,11 @@ function monthRange(monthStr) {
 
 export async function listTransactionsForMonth(client, monthStr) {
   const { start, end } = monthRange(monthStr);
+  return listTransactionsInRange(client, start, end);
+}
+
+/** 查询 [start, end) 区间内的交易，日期都是 YYYY-MM-DD。 */
+export async function listTransactionsInRange(client, start, end) {
   const rows = unwrap(
     await client
       .from('transactions')
@@ -100,19 +105,53 @@ export async function createTransactionsBulk(client, rows) {
   return unwrap(await client.from('transactions').insert(rows).select());
 }
 
-/** 按分类聚合某月的收入/支出总额，供饼图使用（客户端聚合，数据量不大够用）。转账不算真正的收支，排除掉。 */
-export function aggregateByCategory(transactions, type) {
+const UNCATEGORIZED = { id: 'none', name: '未分类', color: '#8d99ae' };
+
+function sumInto(totals, key, info, amount) {
+  const entry = totals.get(key) || { ...info, total: 0 };
+  entry.total += amount;
+  totals.set(key, entry);
+}
+
+function sortedTotals(totals) {
+  return [...totals.values()].sort((a, b) => b.total - a.total);
+}
+
+/**
+ * 按顶级分类聚合收入/支出总额（子分类的金额并入它的父分类），供饼图使用。
+ * 转账不算真正的收支，排除掉。每一项带 hasChildren，表示这个顶级分类下有子分类、可以点开细看。
+ */
+export function aggregateByTopCategory(transactions, type, categories) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
   const totals = new Map();
   for (const t of transactions) {
     if (t.type !== type || t.source === 'transfer') continue;
-    const key = t.category_id || 'none';
-    const name = t.category_name || '未分类';
-    const color = t.category_color || '#8d99ae';
-    const entry = totals.get(key) || { name, color, total: 0 };
-    entry.total += Number(t.amount);
-    totals.set(key, entry);
+    const cat = byId.get(t.category_id);
+    const top = cat ? (cat.parent_id ? byId.get(cat.parent_id) || cat : cat) : UNCATEGORIZED;
+    sumInto(totals, top.id, { id: top.id, name: top.name, color: top.color }, Number(t.amount));
   }
-  return [...totals.values()].sort((a, b) => b.total - a.total);
+  return sortedTotals(totals).map((e) => ({
+    ...e,
+    hasChildren: categories.some((c) => c.parent_id === e.id),
+  }));
+}
+
+/** 某个顶级分类内部按子分类拆开；直接记在顶级分类本身（没选子分类）的单独算一项。 */
+export function aggregateSubcategories(transactions, type, parentId, categories) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const parent = byId.get(parentId);
+  const totals = new Map();
+  for (const t of transactions) {
+    if (t.type !== type || t.source === 'transfer') continue;
+    const cat = byId.get(t.category_id);
+    if (!cat) continue;
+    if (cat.id === parentId) {
+      sumInto(totals, cat.id, { id: cat.id, name: `${cat.name}（未细分）`, color: cat.color }, Number(t.amount));
+    } else if (cat.parent_id === parentId) {
+      sumInto(totals, cat.id, { id: cat.id, name: cat.name, color: cat.color }, Number(t.amount));
+    }
+  }
+  return { parent, items: sortedTotals(totals) };
 }
 
 /* ================= 账户（银行卡 / 信用卡） ================= */

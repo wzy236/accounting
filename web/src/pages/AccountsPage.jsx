@@ -3,7 +3,7 @@ import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/ToastContext.jsx';
 import { useData } from '../lib/DataContext.jsx';
 import { createAccount, deleteAccount, adjustAccountBalance, createTransfer } from '../lib/api.js';
-import { fmt, todayStr } from '../lib/format.js';
+import { fmt, todayStr, balanceClass } from '../lib/format.js';
 import AccountSelect from '../components/AccountSelect.jsx';
 
 export default function AccountsPage() {
@@ -97,53 +97,50 @@ export default function AccountsPage() {
     }
   }
 
+  // 余额为正算资产，为负（主要是信用卡欠款）算负债
+  const assets = accounts.filter((a) => a.balance > 0).reduce((s, a) => s + a.balance, 0);
+  const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s - a.balance, 0);
+
   return (
     <section>
       <h1>💳 账户</h1>
 
-      <section className="add-form-section">
-        <h2>新增账户</h2>
-        <p className="hint">信用卡如果当前有欠款，初始余额填负数（比如欠 2000 就填 -2000）。</p>
-        <form onSubmit={handleAdd} className="tx-form">
-          <div className="tx-form-row">
-            <label className="grow">名称
-              <input type="text" placeholder="例如：招商银行储蓄卡" required value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label>类型
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="bank">银行账户</option>
-                <option value="credit_card">信用卡</option>
-              </select>
-            </label>
-            <label>初始余额
-              <input type="number" step="0.01" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} />
-            </label>
-            <label>颜色
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
-            <button type="submit" className="btn primary">添加账户</button>
+      {accounts.length > 0 && (
+        <div className="summary-cards">
+          <div className="card income">
+            <span className="label">总资产</span>
+            <span className="value">{fmt(assets)}</span>
           </div>
-        </form>
-      </section>
+          <div className="card expense">
+            <span className="label">总负债</span>
+            <span className="value">{fmt(liabilities)}</span>
+          </div>
+          <div className="card balance">
+            <span className="label">净资产</span>
+            <span className="value">{fmt(assets - liabilities)}</span>
+          </div>
+        </div>
+      )}
 
-      <ul className="category-list">
-        {accounts.length === 0 ? (
-          <li className="empty">还没有账户，先在上面添加一个吧</li>
-        ) : (
-          accounts.map((a) => {
-            const balanceClass = a.balance > 0 ? 'positive' : a.balance < 0 ? 'negative' : '';
-            return (
-              <li key={a.id}>
-                <span className="swatch" style={{ background: a.color }}></span>
-                <span className="cat-name">{a.name} <span className="tag">{a.type === 'credit_card' ? '信用卡' : '银行账户'}</span></span>
-                <span className={`balance ${balanceClass}`}>{fmt(a.balance)}</span>
+      {accounts.length === 0 ? (
+        <p className="empty-card">还没有账户，先在下面添加一个吧</p>
+      ) : (
+        <div className="account-grid">
+          {accounts.map((a) => (
+            <div key={a.id} className="account-card" style={{ '--account-color': a.color }}>
+              <div className="account-card-head">
+                <span className="account-name">{a.name}</span>
+                <span className="tag">{a.type === 'credit_card' ? '信用卡' : '银行账户'}</span>
+              </div>
+              <div className={`balance account-balance ${balanceClass(a.balance)}`}>{fmt(a.balance)}</div>
+              <div className="account-actions">
                 <button type="button" className="link-btn" onClick={() => handleAdjust(a)}>调整余额</button>
                 <button type="button" className="link-btn danger" onClick={() => handleDelete(a)}>删除</button>
-              </li>
-            );
-          })
-        )}
-      </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <section className="add-form-section">
         <h2>转账</h2>
@@ -166,6 +163,31 @@ export default function AccountsPage() {
               <input type="text" placeholder="选填" value={transferDescription} onChange={(e) => setTransferDescription(e.target.value)} />
             </label>
             <button type="submit" className="btn primary">转账</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="add-form-section">
+        <h2>新增账户</h2>
+        <p className="hint">信用卡如果当前有欠款，初始余额填负数（比如欠 2000 就填 -2000）。</p>
+        <form onSubmit={handleAdd} className="tx-form">
+          <div className="tx-form-row">
+            <label className="grow">名称
+              <input type="text" placeholder="例如：招商银行储蓄卡" required value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+            <label>类型
+              <select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="bank">银行账户</option>
+                <option value="credit_card">信用卡</option>
+              </select>
+            </label>
+            <label>初始余额
+              <input type="number" step="0.01" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} />
+            </label>
+            <label>颜色
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+            </label>
+            <button type="submit" className="btn primary">添加账户</button>
           </div>
         </form>
       </section>

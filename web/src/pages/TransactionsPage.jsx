@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/ToastContext.jsx';
 import { useData } from '../lib/DataContext.jsx';
 import { listTransactionsForMonth, createTransaction } from '../lib/api.js';
-import { defaultMonth, todayStr, fmt } from '../lib/format.js';
+import { defaultMonth, todayStr, fmt, balanceClass } from '../lib/format.js';
 import { CURRENCIES, HOME_CURRENCY, fetchRate } from '../lib/currency.js';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
@@ -12,7 +13,7 @@ import TransactionRow from '../components/TransactionRow.jsx';
 export default function TransactionsPage() {
   const { client } = useSupabase();
   const showToast = useToast();
-  const { categories, accounts, ready } = useData();
+  const { categories, accounts, refreshAccounts, ready } = useData();
 
   const [month, setMonth] = useState(defaultMonth());
   const [transactions, setTransactions] = useState([]);
@@ -71,6 +72,11 @@ export default function TransactionsPage() {
     if (ready) reload();
   }, [ready, reload]);
 
+  function handleChanged() {
+    reload();
+    refreshAccounts();
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
 
@@ -113,7 +119,7 @@ export default function TransactionsPage() {
       setRate(1);
       setRateError('');
       showToast('已添加');
-      reload();
+      handleChanged();
     } catch (e) {
       showToast('添加失败：' + e.message, true);
     }
@@ -144,6 +150,19 @@ export default function TransactionsPage() {
           <span className="value">{fmt(income - expense)}</span>
         </div>
       </div>
+
+      {accounts.length > 0 && (
+        <div className="account-strip">
+          <span className="account-strip-label">账户余额</span>
+          {accounts.map((a) => (
+            <Link key={a.id} to="/accounts" className="account-chip">
+              <span className="swatch" style={{ background: a.color }}></span>
+              <span className="account-chip-name">{a.name}</span>
+              <span className={`balance ${balanceClass(a.balance)}`}>{fmt(a.balance)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <section className="add-form-section">
         <h2>新增一笔</h2>
@@ -209,7 +228,7 @@ export default function TransactionsPage() {
                 <tr><td colSpan={9} className="empty">本月还没有记录</td></tr>
               ) : (
                 transactions.map((t) => (
-                  <TransactionRow key={t.id} t={t} categories={categories} accounts={accounts} onChanged={reload} />
+                  <TransactionRow key={t.id} t={t} categories={categories} accounts={accounts} onChanged={handleChanged} />
                 ))
               )}
             </tbody>
