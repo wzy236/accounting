@@ -269,7 +269,7 @@ export async function createRecurringBill(client, { name, type, amount, category
         category_id: category_id || null,
         account_id: account_id || null,
         frequency,
-        day_of_week: frequency === 'weekly' ? day_of_week : null,
+        day_of_week: frequency === 'weekly' || frequency === 'biweekly' ? day_of_week : null,
         day_of_month: frequency === 'monthly' ? day_of_month : null,
         next_due_date,
         active: true,
@@ -300,6 +300,7 @@ function addDays(dateStr, days) {
 function computeNextDueDate(fromDateStr, bill) {
   if (bill.frequency === 'daily') return addDays(fromDateStr, 1);
   if (bill.frequency === 'weekly') return addDays(fromDateStr, 7);
+  if (bill.frequency === 'biweekly') return addDays(fromDateStr, 14);
   const [y, m] = fromDateStr.split('-').map(Number);
   const year = m === 12 ? y + 1 : y;
   const monthIndex0 = m % 12;

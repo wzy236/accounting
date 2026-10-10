@@ -16,6 +16,7 @@ function addDays(dateStr, days) {
 function computeNextDueDate(fromDateStr, bill) {
   if (bill.frequency === 'daily') return addDays(fromDateStr, 1);
   if (bill.frequency === 'weekly') return addDays(fromDateStr, 7);
+  if (bill.frequency === 'biweekly') return addDays(fromDateStr, 14);
   const [y, m] = fromDateStr.split('-').map(Number);
   const year = m === 12 ? y + 1 : y;
   const monthIndex0 = m % 12;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionIcon, Button, Menu, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, TextInput,
+  ActionIcon, Button, Input, Menu, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { IconDotsVertical, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
@@ -8,17 +8,36 @@ import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
 import { confirmAction } from '../lib/confirm.jsx';
 import { listRecurringBills, createRecurringBill, updateRecurringBill, deleteRecurringBill } from '../lib/api.js';
-import { todayStr, money, categoryPath } from '../lib/format.js';
+import { todayStr, money, categoryPath, WEEKDAYS, weekday } from '../lib/format.js';
 import PageHeader from '../components/PageHeader.jsx';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
 
-const WEEKDAY_LABEL = ['日', '一', '二', '三', '四', '五', '六'];
+const FREQUENCIES = [
+  { label: '每月', value: 'monthly' },
+  { label: '每两周', value: 'biweekly' },
+  { label: '每周', value: 'weekly' },
+  { label: '每天', value: 'daily' },
+];
+
+// 每周 / 每两周是从下次到期日往后按 7 / 14 天推的，所以星期几以到期日为准
+function weekdayOf(dateStr) {
+  return `周${WEEKDAYS[weekday(dateStr)]}`;
+}
 
 function formatFrequency(bill) {
   if (bill.frequency === 'daily') return '每天';
-  if (bill.frequency === 'weekly') return '每周' + WEEKDAY_LABEL[bill.day_of_week];
+  if (bill.frequency === 'weekly') return `每${weekdayOf(bill.next_due_date)}`;
+  if (bill.frequency === 'biweekly') return `每两周的${weekdayOf(bill.next_due_date)}`;
   return `每月 ${bill.day_of_month} 号`;
+}
+
+function scheduleHint(frequency, dayOfMonth, nextDueDate) {
+  if (!nextDueDate) return null;
+  if (frequency === 'daily') return '之后每天记一笔';
+  if (frequency === 'weekly') return `之后每${weekdayOf(nextDueDate)}记一笔`;
+  if (frequency === 'biweekly') return `之后每两周的${weekdayOf(nextDueDate)}记一笔（隔一周一次）`;
+  return `之后每月 ${dayOfMonth || 1} 号记一笔`;
 }
 
 function NewBillForm({ onDone }) {
@@ -33,7 +52,6 @@ function NewBillForm({ onDone }) {
   const [accountId, setAccountId] = useState('');
   const [frequency, setFrequency] = useState('monthly');
   const [dayOfMonth, setDayOfMonth] = useState(1);
-  const [dayOfWeek, setDayOfWeek] = useState('1');
   const [nextDueDate, setNextDueDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
 
@@ -53,7 +71,7 @@ function NewBillForm({ onDone }) {
         category_id: categoryId || null,
         account_id: accountId || null,
         frequency,
-        day_of_week: parseInt(dayOfWeek, 10),
+        day_of_week: weekday(nextDueDate),
         day_of_month: Number(dayOfMonth) || 1,
         next_due_date: nextDueDate,
       });
@@ -82,31 +100,16 @@ function NewBillForm({ onDone }) {
           <CategorySelect label="分类" categories={categories} type={type} value={categoryId} onChange={setCategoryId} />
           <AccountSelect label="账户" accounts={accounts} value={accountId} onChange={setAccountId} />
         </SimpleGrid>
-        <div>
-          <Text size="sm" fw={500} mb={6}>重复频率</Text>
-          <SegmentedControl
-            fullWidth
-            data={[{ label: '每月', value: 'monthly' }, { label: '每周', value: 'weekly' }, { label: '每天', value: 'daily' }]}
-            value={frequency}
-            onChange={setFrequency}
-          />
-        </div>
-        <SimpleGrid cols={2} spacing="sm">
+        <Input.Wrapper label="重复频率">
+          <SegmentedControl fullWidth mt={4} data={FREQUENCIES} value={frequency} onChange={setFrequency} />
+        </Input.Wrapper>
+        <SimpleGrid cols={frequency === 'monthly' ? 2 : 1} spacing="sm">
           {frequency === 'monthly' && (
             <NumberInput label="每月第几天" value={dayOfMonth} onChange={setDayOfMonth} min={1} max={31} allowDecimal={false} />
           )}
-          {frequency === 'weekly' && (
-            <Select
-              label="星期几"
-              data={[1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: String(d), label: `周${WEEKDAY_LABEL[d]}` }))}
-              value={dayOfWeek}
-              onChange={(v) => setDayOfWeek(v || '1')}
-              allowDeselect={false}
-              comboboxProps={{ withinPortal: true }}
-            />
-          )}
           <TextInput type="date" label="首次到期日" required value={nextDueDate} onChange={(e) => setNextDueDate(e.target.value)} />
         </SimpleGrid>
+        <Text size="sm" c="dimmed" mt={-8}>{scheduleHint(frequency, dayOfMonth, nextDueDate)}</Text>
         <Button type="submit" loading={saving}>添加</Button>
       </Stack>
     </form>
