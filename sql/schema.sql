@@ -177,3 +177,40 @@ alter table public.categories drop constraint if exists categories_parent_not_se
 alter table public.categories add constraint categories_parent_not_self check (parent_id is distinct from id);
 
 create index if not exists idx_categories_parent on public.categories (parent_id);
+
+-- ========== 预算 ==========
+-- 定时账单可以单独选择要不要算进预算（跟“启用”分开：启用决定会不会自动记账，in_budget 决定算不算进预算）
+alter table public.recurring_bills add column if not exists in_budget boolean not null default true;
+
+-- 预算里的“预计项目”：只用来估算预算（比如每月买菜大概 600、每年旅行 3000），不会生成记账记录
+create table if not exists public.budget_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  type text not null check (type in ('income','expense')),
+  amount numeric(12,2) not null check (amount > 0),
+  frequency text not null check (frequency in ('daily','weekly','biweekly','monthly','yearly')),
+  category_id uuid references public.categories(id) on delete set null,
+  included boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_budget_items_user on public.budget_items (user_id);
+
+alter table public.budget_items enable row level security;
+
+drop policy if exists "budget_items_select_own" on public.budget_items;
+create policy "budget_items_select_own" on public.budget_items
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "budget_items_insert_own" on public.budget_items;
+create policy "budget_items_insert_own" on public.budget_items
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "budget_items_update_own" on public.budget_items;
+create policy "budget_items_update_own" on public.budget_items
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "budget_items_delete_own" on public.budget_items;
+create policy "budget_items_delete_own" on public.budget_items
+  for delete using (auth.uid() = user_id);
