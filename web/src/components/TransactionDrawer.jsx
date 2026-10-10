@@ -9,7 +9,7 @@ import { useData } from '../lib/DataContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { confirmAction } from '../lib/confirm.jsx';
 import { createTransaction, updateTransaction, deleteTransaction, createTransfer } from '../lib/api.js';
-import { CURRENCIES, HOME_CURRENCY, fetchRate } from '../lib/currency.js';
+import { CURRENCIES, HOME_CURRENCY, fetchRate, round2 } from '../lib/currency.js';
 import { fmt, todayStr } from '../lib/format.js';
 import CategoryPicker from './CategoryPicker.jsx';
 import AccountSelect from './AccountSelect.jsx';
@@ -34,10 +34,17 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
   const [description, setDescription] = useState(tx?.description || '');
   const [saving, setSaving] = useState(false);
 
-  const [currency, setCurrency] = useState(HOME_CURRENCY);
-  const [rate, setRate] = useState(1);
+  const accountCcy = (id) => accounts.find((a) => String(a.id) === String(id))?.currency || HOME_CURRENCY;
+
+  // 新记一笔时币种默认跟着账户走（比如筛选了美元账户再点 +，直接就是 USD）
+  const initialCurrency = isEdit ? HOME_CURRENCY : accountCcy(defaultAccountId);
+  const [currency, setCurrency] = useState(initialCurrency);
+  const [rate, setRate] = useState(initialCurrency === HOME_CURRENCY ? 1 : null);
   const [rateLoading, setRateLoading] = useState(false);
   const [rateError, setRateError] = useState('');
+
+  const [toAmount, setToAmount] = useState('');
+  const [xferRate, setXferRate] = useState(1);
 
   const loadRate = useCallback(async (cur) => {
     if (cur === HOME_CURRENCY) {
@@ -61,6 +68,48 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
   const showCurrency = !isEdit && mode !== 'transfer';
   const foreign = showCurrency && currency !== HOME_CURRENCY;
   const converted = foreign && rate && amount ? Number(amount) * rate : null;
+
+  function handleAccountChange(v) {
+    setAccountId(v);
+    if (isEdit || !v) return;
+    const cur = accountCcy(v);
+    if (cur !== currency) {
+      setCurrency(cur);
+      loadRate(cur);
+    }
+  }
+
+  // 转账：两边币种不同时，转入金额默认按实时汇率换算（用户可以改成银行实际到账金额）
+  const fromAcc = accounts.find((a) => String(a.id) === fromId);
+  const toAcc = accounts.find((a) => String(a.id) === toId);
+  const fromCcy = fromAcc?.currency || HOME_CURRENCY;
+  const toCcy = toAcc?.currency || HOME_CURRENCY;
+  const crossCurrency = isNewTransfer && !!fromAcc && !!toAcc && fromCcy !== toCcy;
+  const suggestedTo = crossCurrency && amount && xferRate ? round2(Number(amount) * xferRate) : null;
+
+  async function loadXferRate(fromC, toC) {
+    if (fromC === toC) {
+      setXferRate(1);
+      return;
+    }
+    setXferRate(null);
+    try {
+      const [rFrom, rTo] = await Promise.all([fetchRate(fromC, HOME_CURRENCY), fetchRate(toC, HOME_CURRENCY)]);
+      setXferRate(rFrom / rTo);
+    } catch {
+      setXferRate(null);
+    }
+  }
+
+  function handleFromChange(v) {
+    setFromId(v);
+    loadXferRate(accountCcy(v), toCcy);
+  }
+
+  function handleToChange(v) {
+    setToId(v);
+    loadXferRate(fromCcy, accountCcy(v));
+  }
 
   async function createNormal(amt) {
     let cadAmount = amt;
@@ -104,6 +153,10 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
         showToast('转出和转入不能是同一个账户', true);
         return;
       }
+      if (crossCurrency && !(Number(toAmount) > 0) && !suggestedTo) {
+        showToast('请填写转入金额', true);
+        return;
+      }
     }
 
     setSaving(true);
@@ -119,15 +172,12 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
         });
         showToast('已保存');
       } else if (isNewTransfer) {
-        const from = accounts.find((a) => String(a.id) === fromId);
-        const to = accounts.find((a) => String(a.id) === toId);
         await createTransfer(client, {
           date,
-          fromAccountId: fromId,
-          fromAccountName: from?.name || '',
-          toAccountId: toId,
-          toAccountName: to?.name || '',
-          amount: amt,
+          from: fromAcc,
+          to: toAcc,
+          fromAmount: amt,
+          toAmount: crossCurrency ? Number(toAmount) || suggestedTo : amt,
           description: description.trim(),
         });
         showToast('转账成功');
@@ -161,6 +211,11 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
     }
   }
 
+  let amountLabel = '金额';
+  if (isEdit && tx.currency && tx.currency !== HOME_CURRENCY) amountLabel = '金额（CAD）';
+  else if (crossCurrency) amountLabel = `转出金额（${fromCcy}）`;
+  else if (isNewTransfer && fromAcc && fromCcy !== HOME_CURRENCY) amountLabel = `金额（${fromCcy}）`;
+
   const segmentData = [
     { label: '收入', value: 'income', disabled: isTransferEdit },
     { label: '支出', value: 'expense', disabled: isTransferEdit },
@@ -180,7 +235,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
 
         <Group gap="xs" align="flex-end" wrap="nowrap">
           <NumberInput
-            label={isEdit && tx.currency && tx.currency !== HOME_CURRENCY ? '金额（CAD）' : '金额'}
+            label={amountLabel}
             placeholder="0.00"
             value={amount}
             onChange={setAmount}
@@ -221,6 +276,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
             {!rateLoading && !rateError && rate && (
               <>汇率 1 {currency} = {rate.toFixed(4)} CAD{converted != null && <>，约合 <b>{fmt(converted)}</b></>}</>
             )}
+            {!rateLoading && !rateError && !rate && '保存时会按实时汇率换算成 CAD'}
           </Text>
         )}
         {isEdit && tx.currency && tx.currency !== HOME_CURRENCY && (
@@ -233,10 +289,29 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
         <TextInput type="date" label="日期" required withAsterisk={false} value={date} onChange={(e) => setDate(e.target.value)} />
 
         {isNewTransfer ? (
-          <Group grow gap="xs" align="flex-start">
-            <AccountSelect label="转出账户" placeholder="选择账户" accounts={accounts} value={fromId} onChange={setFromId} clearable={false} />
-            <AccountSelect label="转入账户" placeholder="选择账户" accounts={accounts} value={toId} onChange={setToId} clearable={false} />
-          </Group>
+          <>
+            <Group grow gap="xs" align="flex-start">
+              <AccountSelect label="转出账户" placeholder="选择账户" accounts={accounts} value={fromId} onChange={handleFromChange} clearable={false} />
+              <AccountSelect label="转入账户" placeholder="选择账户" accounts={accounts} value={toId} onChange={handleToChange} clearable={false} />
+            </Group>
+            {crossCurrency && (
+              <NumberInput
+                label={`转入金额（${toCcy}）`}
+                description={xferRate
+                  ? `按实时汇率约 ${suggestedTo != null ? suggestedTo.toFixed(2) : '—'} ${toCcy}，不填就按这个算；可以改成银行实际到账的金额`
+                  : '正在查询汇率…'}
+                placeholder={suggestedTo != null ? suggestedTo.toFixed(2) : '0.00'}
+                value={toAmount}
+                onChange={setToAmount}
+                decimalScale={2}
+                min={0}
+                allowNegative={false}
+                thousandSeparator=","
+                hideControls
+                inputMode="decimal"
+              />
+            )}
+          </>
         ) : (
           <>
             {!isTransferEdit && (
@@ -246,7 +321,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
                 </div>
               </Input.Wrapper>
             )}
-            <AccountSelect label="账户" accounts={accounts} value={accountId} onChange={setAccountId} />
+            <AccountSelect label="账户" accounts={accounts} value={accountId} onChange={handleAccountChange} />
           </>
         )}
 

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  ActionIcon, Button, ColorInput, ColorSwatch, Group, Input, Menu, Modal, SegmentedControl, Stack, Text, TextInput, Tooltip,
+  ActionIcon, Button, Group, Menu, Modal, SegmentedControl, Stack, Text, TextInput, Tooltip,
 } from '@mantine/core';
-import { IconCheck, IconDotsVertical, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconDotsVertical, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
@@ -10,38 +10,10 @@ import { confirmAction } from '../lib/confirm.jsx';
 import { createCategory, updateCategory, deleteCategory } from '../lib/api.js';
 import { buildCategoryTree } from '../lib/format.js';
 import PageHeader from '../components/PageHeader.jsx';
-
-const SWATCHES = [
-  '#f25a5a', '#f59f45', '#f2c94c', '#a3c94f', '#6fcf97', '#2f9e8f',
-  '#4fb3d9', '#2f7ee6', '#5b6ee8', '#9b6bd8', '#e86fa8', '#8d99ae',
-];
+import ColorField from '../components/ColorField.jsx';
 
 const duplicateMessage = (err) =>
   err.message?.includes('duplicate') ? '同类型下已经有叫这个名字的分类了' : err.message;
-
-function ColorField({ value, onChange }) {
-  return (
-    <Input.Wrapper label="颜色">
-      <Group gap={8} mt={6} mb={8}>
-        {SWATCHES.map((c) => (
-          <ColorSwatch
-            key={c}
-            component="button"
-            type="button"
-            color={c}
-            size={28}
-            onClick={() => onChange(c)}
-            aria-label={`颜色 ${c}`}
-            style={{ color: '#fff', cursor: 'pointer' }}
-          >
-            {value?.toLowerCase() === c && <IconCheck size={16} />}
-          </ColorSwatch>
-        ))}
-      </Group>
-      <ColorInput value={value} onChange={onChange} placeholder="也可以输入自定义颜色，例如 #ff8800" aria-label="自定义颜色" />
-    </Input.Wrapper>
-  );
-}
 
 /**
  * 新增顶级分类 / 在某个大类下新增子分类 / 编辑已有分类（名称和颜色）共用一个表单。

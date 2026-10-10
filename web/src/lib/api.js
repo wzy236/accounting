@@ -1,6 +1,8 @@
 // 业务接口层：每个函数第一个参数都是 supabase-js client（来自 useSupabase() 的 context），
 // 用的是官方 SDK 的查询构造器，权限仍然靠数据库那边的 RLS 策略保证，跟静态站点版本原理一致。
 
+import { HOME_CURRENCY, fetchRatesToHome, toStoredAmount, round2 } from './currency.js';
+
 export const DEFAULT_CATEGORIES = [
   { name: '餐饮', type: 'expense', color: '#e07a5f' },
   { name: '交通', type: 'expense', color: '#3d5a80' },
@@ -177,8 +179,11 @@ export async function listAccounts(client) {
   return unwrap(await client.from('accounts').select('*').order('type').order('name'));
 }
 
-export async function createAccount(client, { name, type, initial_balance, color }) {
-  return unwrap(await client.from('accounts').insert({ name, type, initial_balance: initial_balance || 0, color }).select());
+export async function createAccount(client, { name, type, initial_balance, color, currency }) {
+  const row = { name, type, initial_balance: initial_balance || 0, color };
+  // 只有非 CAD 才写 currency 列，这样没跑新 schema 的数据库也还能正常建 CAD 账户
+  if (currency && currency !== HOME_CURRENCY) row.currency = currency;
+  return unwrap(await client.from('accounts').insert(row).select());
 }
 
 export async function updateAccount(client, id, fields) {
@@ -194,38 +199,63 @@ export async function deleteAccount(client, id) {
   return deleted;
 }
 
-/** 每个账户的当前余额 = 初始余额 + 关联到该账户的收入 - 支出。 */
+/**
+ * 每个账户的当前余额（用账户自己的币种）= 初始余额 + 关联记录的收入 - 支出。
+ * 记录里 amount 永远是 CAD：外币账户优先用记录自己的原币金额（币种一致时），
+ * 对不上的（比如以前按 CAD 记进去的）按当前汇率折算。
+ * 另外附带 balance_cad（按当前汇率折成 CAD，用来算总资产），汇率查不到时为 null。
+ */
 export async function getAccountBalances(client) {
-  const accounts = await listAccounts(client);
+  const accounts = (await listAccounts(client)).map((a) => ({ ...a, currency: a.currency || HOME_CURRENCY }));
   if (accounts.length === 0) return [];
-  const txs = await fetchAllPages(() =>
-    client.from('transactions').select('account_id,type,amount').not('account_id', 'is', null).order('id')
-  );
+  const [txs, rates] = await Promise.all([
+    fetchAllPages(() =>
+      client.from('transactions').select('account_id,type,amount,currency,original_amount').not('account_id', 'is', null).order('id')
+    ),
+    fetchRatesToHome(accounts.map((a) => a.currency)),
+  ]);
+  const byId = new Map(accounts.map((a) => [a.id, a]));
   const deltas = new Map();
   for (const t of txs) {
-    const delta = t.type === 'income' ? Number(t.amount) : -Number(t.amount);
+    const acc = byId.get(t.account_id);
+    if (!acc) continue;
+    let value = Number(t.amount);
+    if (acc.currency !== HOME_CURRENCY) {
+      if (t.currency === acc.currency && t.original_amount != null) value = Number(t.original_amount);
+      else if (rates[acc.currency]) value = Number(t.amount) / rates[acc.currency];
+    }
+    const delta = t.type === 'income' ? value : -value;
     deltas.set(t.account_id, (deltas.get(t.account_id) || 0) + delta);
   }
-  return accounts.map((a) => ({
-    ...a,
-    balance: Number(a.initial_balance) + (deltas.get(a.id) || 0),
-  }));
+  return accounts.map((a) => {
+    const balance = Number(a.initial_balance) + (deltas.get(a.id) || 0);
+    const rate = rates[a.currency];
+    return { ...a, balance, balance_cad: rate ? balance * rate : null };
+  });
+}
+
+/** 外币字段只在非 CAD 时带上，CAD 记录保持和以前一样。 */
+function foreignFields(stored) {
+  return stored.currency === HOME_CURRENCY
+    ? { amount: stored.amount }
+    : stored;
 }
 
 /**
- * 把账户余额调整到 targetBalance：按差额补一笔收入/支出交易（source: 'adjustment'），
+ * 把账户余额调整到 targetBalance（账户自己的币种）：按差额补一笔收入/支出交易（source: 'adjustment'），
  * 而不是直接改数字，这样余额的每次变动都在记账记录里留痕。差额为 0 时什么都不做。
  */
-export async function adjustAccountBalance(client, accountId, currentBalance, targetBalance) {
-  const delta = Number(targetBalance) - Number(currentBalance);
+export async function adjustAccountBalance(client, account, targetBalance) {
+  const delta = round2(Number(targetBalance) - Number(account.balance));
   if (delta === 0) return null;
+  const stored = await toStoredAmount(Math.abs(delta), account.currency);
   return createTransaction(client, {
     date: todayDateStr(),
     type: delta > 0 ? 'income' : 'expense',
-    amount: Math.abs(delta),
-    account_id: accountId,
+    account_id: account.id,
     description: '余额调整',
     source: 'adjustment',
+    ...stored,
   });
 }
 
@@ -233,22 +263,29 @@ export async function adjustAccountBalance(client, accountId, currentBalance, ta
  * 账户间转账：记一对交易（源账户支出 + 目标账户收入），source 都标成 'transfer'。
  * 两条记录用一次批量插入发出去，数据库那边是同一条 INSERT 语句，不会出现只写成功一半的情况。
  * 转账不算真正的收入/支出，月度统计和饼图里会把 source: 'transfer' 的记录排除掉。
+ * fromAmount / toAmount 分别是两个账户各自币种的金额（同币种时相等）。
  */
-export async function createTransfer(client, { date, fromAccountId, fromAccountName, toAccountId, toAccountName, amount, description }) {
+export async function createTransfer(client, { date, from, to, fromAmount, toAmount, description }) {
   const note = description ? `：${description}` : '';
+  const [out, inn] = await Promise.all([
+    toStoredAmount(fromAmount, from.currency),
+    toStoredAmount(toAmount ?? fromAmount, to.currency),
+  ]);
   return createTransactionsBulk(client, [
     {
-      date, type: 'expense', amount,
-      account_id: fromAccountId,
+      date, type: 'expense',
+      ...foreignFields(out),
+      account_id: from.id,
       category_id: null,
-      description: `转账到「${toAccountName}」${note}`,
+      description: `转账到「${to.name}」${note}`,
       source: 'transfer',
     },
     {
-      date, type: 'income', amount,
-      account_id: toAccountId,
+      date, type: 'income',
+      ...foreignFields(inn),
+      account_id: to.id,
       category_id: null,
-      description: `转账自「${fromAccountName}」${note}`,
+      description: `转账自「${from.name}」${note}`,
       source: 'transfer',
     },
   ]);
