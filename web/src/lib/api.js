@@ -302,22 +302,26 @@ export async function listRecurringBills(client) {
   );
 }
 
-export async function createRecurringBill(client, { name, type, amount, category_id, account_id, frequency, day_of_week, day_of_month, next_due_date }) {
-  return unwrap(
-    await client
-      .from('recurring_bills')
-      .insert({
-        name, type, amount,
-        category_id: category_id || null,
-        account_id: account_id || null,
-        frequency,
-        day_of_week: frequency === 'weekly' || frequency === 'biweekly' ? day_of_week : null,
-        day_of_month: frequency === 'monthly' ? day_of_month : null,
-        next_due_date,
-        active: true,
-      })
-      .select()
-  );
+/** 定时账单表单 → 数据库字段；按频率把用不到的 day_of_week / day_of_month 清成 null。 */
+function billRow({ name, type, amount, category_id, account_id, frequency, day_of_week, day_of_month, next_due_date }) {
+  return {
+    name, type, amount,
+    category_id: category_id || null,
+    account_id: account_id || null,
+    frequency,
+    day_of_week: frequency === 'weekly' || frequency === 'biweekly' ? day_of_week : null,
+    day_of_month: frequency === 'monthly' ? day_of_month : null,
+    next_due_date,
+  };
+}
+
+export async function createRecurringBill(client, bill) {
+  return unwrap(await client.from('recurring_bills').insert({ ...billRow(bill), active: true }).select());
+}
+
+/** 编辑定时账单的全部内容（不改启用状态）。 */
+export async function editRecurringBill(client, id, bill) {
+  return unwrap(await client.from('recurring_bills').update(billRow(bill)).eq('id', id).select());
 }
 
 export async function updateRecurringBill(client, id, fields) {

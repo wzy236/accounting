@@ -23,9 +23,12 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
 
   const isEdit = !!tx;
   const isTransferEdit = isEdit && tx.source === 'transfer';
+  // 外币记录按原币金额编辑（外币账户的余额是按原币算的），保存时用记账当时的汇率换回 CAD
+  const editForeign = isEdit && tx.currency && tx.currency !== HOME_CURRENCY && tx.original_amount != null;
+  const editRate = editForeign ? Number(tx.exchange_rate) || null : null;
 
   const [mode, setMode] = useState(isEdit ? (isTransferEdit ? 'transfer' : tx.type) : defaultMode);
-  const [amount, setAmount] = useState(isEdit ? Number(tx.amount) : '');
+  const [amount, setAmount] = useState(isEdit ? Number(editForeign ? tx.original_amount : tx.amount) : '');
   const [date, setDate] = useState(tx?.date || defaultDate || todayStr());
   const [categoryId, setCategoryId] = useState(tx?.category_id || '');
   const [accountId, setAccountId] = useState(tx ? tx.account_id || '' : defaultAccountId || '');
@@ -162,10 +165,15 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
     setSaving(true);
     try {
       if (isEdit) {
+        let amountFields = { amount: amt };
+        if (editForeign) {
+          const r = editRate || await fetchRate(tx.currency, HOME_CURRENCY);
+          amountFields = { amount: round2(amt * r), original_amount: amt };
+        }
         await updateTransaction(client, tx.id, {
           date,
           type: isTransferEdit ? tx.type : mode,
-          amount: amt,
+          ...amountFields,
           category_id: isTransferEdit ? null : categoryId || null,
           account_id: accountId || null,
           description: description.trim(),
@@ -212,7 +220,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
   }
 
   let amountLabel = '金额';
-  if (isEdit && tx.currency && tx.currency !== HOME_CURRENCY) amountLabel = '金额（CAD）';
+  if (editForeign) amountLabel = `金额（${tx.currency}）`;
   else if (crossCurrency) amountLabel = `转出金额（${fromCcy}）`;
   else if (isNewTransfer && fromAcc && fromCcy !== HOME_CURRENCY) amountLabel = `金额（${fromCcy}）`;
 
@@ -279,10 +287,11 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
             {!rateLoading && !rateError && !rate && '保存时会按实时汇率换算成 CAD'}
           </Text>
         )}
-        {isEdit && tx.currency && tx.currency !== HOME_CURRENCY && (
+        {editForeign && (
           <Text size="sm" c="dimmed" mt={-8}>
-            原始金额 {Number(tx.original_amount).toFixed(2)} {tx.currency}
-            {tx.exchange_rate ? `（汇率 ${Number(tx.exchange_rate).toFixed(4)}）` : ''}
+            {editRate
+              ? <>按记账时的汇率 1 {tx.currency} = {editRate.toFixed(4)} CAD 换算{amount !== '' && <>，约合 <b>{fmt(Number(amount) * editRate)}</b></>}</>
+              : '保存时会按实时汇率换算成 CAD'}
           </Text>
         )}
 

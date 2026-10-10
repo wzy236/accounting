@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ActionIcon, Button, Group, Menu, Modal, SegmentedControl, Stack, Text, TextInput, Tooltip,
+  ActionIcon, Button, Group, Menu, Modal, SegmentedControl, Select, Stack, Text, TextInput, Tooltip,
 } from '@mantine/core';
 import { IconDotsVertical, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
@@ -16,13 +16,25 @@ const duplicateMessage = (err) =>
   err.message?.includes('duplicate') ? '同类型下已经有叫这个名字的分类了' : err.message;
 
 /**
- * 新增顶级分类 / 在某个大类下新增子分类 / 编辑已有分类（名称和颜色）共用一个表单。
+ * 新增顶级分类 / 在某个大类下新增子分类 / 编辑已有分类（名称、颜色、上级分类）共用一个表单。
  * target: { kind: 'create', type } | { kind: 'createSub', parent } | { kind: 'edit', category, parent? }
  */
 function CategoryForm({ target, onDone }) {
   const { client } = useSupabase();
   const showToast = useToast();
+  const { categories } = useData();
   const isEdit = target.kind === 'edit';
+
+  // 只支持两级：自己有子分类的大类不能再挂到别的分类下面
+  const hasChildren = isEdit && categories.some((c) => c.parent_id === target.category.id);
+  const canMove = isEdit && !hasChildren;
+  const [parentId, setParentId] = useState(isEdit ? target.category.parent_id || null : null);
+  const parentOptions = isEdit
+    ? categories
+      .filter((c) => c.type === target.category.type && !c.parent_id && c.id !== target.category.id)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({ value: String(c.id), label: c.name }))
+    : [];
 
   const [type, setType] = useState(target.type || target.parent?.type || target.category?.type || 'expense');
   const [name, setName] = useState(isEdit ? target.category.name : '');
@@ -40,6 +52,7 @@ function CategoryForm({ target, onDone }) {
       fields = {};
       if (trimmed !== target.category.name) fields.name = trimmed;
       if (color !== target.category.color) fields.color = color;
+      if (canMove && (parentId || null) !== (target.category.parent_id || null)) fields.parent_id = parentId || null;
       if (Object.keys(fields).length === 0) {
         onDone(false);
         return;
@@ -77,7 +90,7 @@ function CategoryForm({ target, onDone }) {
             onChange={setType}
           />
         )}
-        {target.parent && (
+        {target.kind === 'createSub' && (
           <Group gap={6}>
             <Text size="sm" c="dimmed">上级分类</Text>
             <span className="dot" style={{ background: target.parent.color }} />
@@ -93,6 +106,19 @@ function CategoryForm({ target, onDone }) {
           error={error}
           data-autofocus
         />
+        {canMove && (
+          <Select
+            label="上级分类"
+            description="挂到某个大类下面就成了它的子分类；清空就是大类"
+            placeholder="无（作为大类）"
+            data={parentOptions}
+            value={parentId ? String(parentId) : null}
+            onChange={setParentId}
+            clearable
+            comboboxProps={{ withinPortal: true }}
+          />
+        )}
+        {hasChildren && <Text size="xs" c="dimmed">这个大类下面有子分类，所以不能再放到别的分类下面。</Text>}
         <ColorField value={color} onChange={setColor} />
         <Button type="submit" loading={saving}>{isEdit ? '保存' : '添加'}</Button>
       </Stack>

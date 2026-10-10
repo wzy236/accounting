@@ -230,6 +230,7 @@ button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0
   cursor: pointer;
 }
 .list-row:has(.category-main) { padding-top: 6px; padding-bottom: 6px; }
+.category-main.bill-main { flex-direction: column; align-items: stretch; gap: 0; }
 .list-row:has(.category-main:hover) { background: var(--mantine-color-gray-0); }
 .list-row-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
