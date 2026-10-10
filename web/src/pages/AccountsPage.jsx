@@ -1,93 +1,146 @@
 import { useState } from 'react';
+import {
+  ActionIcon, Button, ColorInput, Menu, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput,
+} from '@mantine/core';
+import { IconArrowsLeftRight, IconPlus, IconScale, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
-import { useToast } from '../lib/ToastContext.jsx';
+import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
-import { createAccount, deleteAccount, adjustAccountBalance, createTransfer } from '../lib/api.js';
-import { fmt, todayStr, balanceClass } from '../lib/format.js';
-import AccountSelect from '../components/AccountSelect.jsx';
+import { confirmAction } from '../lib/confirm.jsx';
+import { createAccount, deleteAccount, adjustAccountBalance } from '../lib/api.js';
+import { money, todayStr } from '../lib/format.js';
+import PageHeader from '../components/PageHeader.jsx';
+import TransactionDrawer from '../components/TransactionDrawer.jsx';
+import { SummaryBar } from '../components/TransactionList.jsx';
+
+const SWATCHES = ['#f25a5a', '#f59f45', '#f2c94c', '#2f9e8f', '#2f7ee6', '#3d5a80', '#9b6bd8', '#e86fa8', '#8d99ae', '#333333'];
+
+const GROUPS = [
+  { type: 'bank', label: '银行账户' },
+  { type: 'credit_card', label: '信用卡' },
+];
+
+function NewAccountModal({ opened, onClose, onCreated }) {
+  const { client } = useSupabase();
+  const showToast = useToast();
+  const [name, setName] = useState('');
+  const [type, setType] = useState('bank');
+  const [initialBalance, setInitialBalance] = useState(0);
+  const [color, setColor] = useState('#2f7ee6');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      await createAccount(client, { name: trimmed, type, initial_balance: Number(initialBalance) || 0, color });
+      showToast('已添加账户');
+      setName('');
+      setType('bank');
+      setInitialBalance(0);
+      onCreated();
+      onClose();
+    } catch (err) {
+      showToast('添加失败：' + (err.message?.includes('duplicate') ? '账户名已存在' : err.message), true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={<Text fw={700}>新增账户</Text>} centered>
+      <form onSubmit={handleSubmit}>
+        <Stack gap="md">
+          <TextInput label="名称" placeholder="例如：招商银行储蓄卡" required value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
+          <SegmentedControl
+            fullWidth
+            data={[{ label: '银行账户', value: 'bank' }, { label: '信用卡', value: 'credit_card' }]}
+            value={type}
+            onChange={setType}
+          />
+          <NumberInput
+            label="初始余额"
+            description="信用卡当前有欠款的话填负数，比如欠 2000 就填 -2000"
+            value={initialBalance}
+            onChange={setInitialBalance}
+            decimalScale={2}
+            thousandSeparator=","
+            hideControls
+            inputMode="decimal"
+          />
+          <ColorInput label="颜色" value={color} onChange={setColor} swatches={SWATCHES} swatchesPerRow={10} />
+          <Button type="submit" loading={saving}>添加账户</Button>
+        </Stack>
+      </form>
+    </Modal>
+  );
+}
+
+function AdjustModal({ account, onClose, onAdjusted }) {
+  const { client } = useSupabase();
+  const showToast = useToast();
+  const [target, setTarget] = useState(account ? Number(account.balance.toFixed(2)) : 0);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (target === '' || Number.isNaN(Number(target))) return;
+    setSaving(true);
+    try {
+      const result = await adjustAccountBalance(client, account.id, account.balance, Number(target));
+      showToast(result ? '已调整余额' : '余额没有变化');
+      onAdjusted();
+      onClose();
+    } catch (err) {
+      showToast('调整失败：' + err.message, true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">会按差额自动补一笔收入/支出记录（来源标为“余额调整”），不会直接改数字，方便以后对账。</Text>
+        <NumberInput
+          label="调整为"
+          value={target}
+          onChange={setTarget}
+          decimalScale={2}
+          thousandSeparator=","
+          hideControls
+          inputMode="decimal"
+          size="lg"
+          data-autofocus
+        />
+        <Button type="submit" loading={saving}>确认调整</Button>
+      </Stack>
+    </form>
+  );
+}
 
 export default function AccountsPage() {
   const { client } = useSupabase();
   const showToast = useToast();
   const { accounts, refreshAccounts } = useData();
 
-  const [name, setName] = useState('');
-  const [type, setType] = useState('bank');
-  const [initialBalance, setInitialBalance] = useState('0');
-  const [color, setColor] = useState('#3d5a80');
+  const [newOpened, setNewOpened] = useState(false);
+  const [adjusting, setAdjusting] = useState(null);
+  const [transfer, setTransfer] = useState({ opened: false, key: 0 });
 
-  const [fromAccountId, setFromAccountId] = useState('');
-  const [toAccountId, setToAccountId] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferDate, setTransferDate] = useState(todayStr());
-  const [transferDescription, setTransferDescription] = useState('');
-
-  async function handleAdd(e) {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    try {
-      await createAccount(client, { name: trimmed, type, initial_balance: parseFloat(initialBalance) || 0, color });
-      setName('');
-      setType('bank');
-      setInitialBalance('0');
-      showToast('已添加账户');
-      refreshAccounts();
-    } catch (e) {
-      showToast('添加失败：' + (e.message?.includes('duplicate') ? '账户名已存在' : e.message), true);
-    }
-  }
-
-  async function handleAdjust(a) {
-    const input = window.prompt(`把「${a.name}」的余额调整为多少？（会自动补一笔差额的收入/支出记录）`, a.balance.toFixed(2));
-    if (input === null) return;
-    const target = parseFloat(input);
-    if (Number.isNaN(target)) {
-      showToast('请输入有效的数字', true);
-      return;
-    }
-    try {
-      const result = await adjustAccountBalance(client, a.id, a.balance, target);
-      showToast(result ? '已调整余额' : '余额没有变化');
-      refreshAccounts();
-    } catch (e) {
-      showToast('调整失败：' + e.message, true);
-    }
-  }
-
-  async function handleTransfer(e) {
-    e.preventDefault();
-    if (!fromAccountId || !toAccountId) return;
-    if (fromAccountId === toAccountId) {
-      showToast('转出和转入不能是同一个账户', true);
-      return;
-    }
-    const fromAccount = accounts.find((a) => String(a.id) === fromAccountId);
-    const toAccount = accounts.find((a) => String(a.id) === toAccountId);
-    try {
-      await createTransfer(client, {
-        date: transferDate,
-        fromAccountId,
-        fromAccountName: fromAccount?.name || '',
-        toAccountId,
-        toAccountName: toAccount?.name || '',
-        amount: parseFloat(transferAmount),
-        description: transferDescription.trim(),
-      });
-      setFromAccountId('');
-      setToAccountId('');
-      setTransferAmount('');
-      setTransferDate(todayStr());
-      setTransferDescription('');
-      showToast('转账成功');
-      refreshAccounts();
-    } catch (e) {
-      showToast('转账失败：' + e.message, true);
-    }
-  }
+  // 余额为正算资产，为负（主要是信用卡欠款）算负债
+  const assets = accounts.filter((a) => a.balance > 0).reduce((s, a) => s + a.balance, 0);
+  const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s - a.balance, 0);
 
   async function handleDelete(a) {
-    if (!window.confirm('删除后该账户下的记录会变为不关联任何账户，确认删除？')) return;
+    const ok = await confirmAction({
+      title: `删除「${a.name}」`,
+      message: '删除后该账户下的记录会变为不关联任何账户，确认删除？',
+      confirmLabel: '删除',
+    });
+    if (!ok) return;
     try {
       await deleteAccount(client, a.id);
       showToast('已删除');
@@ -97,100 +150,84 @@ export default function AccountsPage() {
     }
   }
 
-  // 余额为正算资产，为负（主要是信用卡欠款）算负债
-  const assets = accounts.filter((a) => a.balance > 0).reduce((s, a) => s + a.balance, 0);
-  const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s - a.balance, 0);
+  const openTransfer = () => setTransfer((t) => ({ opened: true, key: t.key + 1 }));
 
   return (
-    <section>
-      <h1>💳 账户</h1>
+    <>
+      <PageHeader
+        title="账户"
+        right={(
+          <>
+            <Button variant="light" size="sm" visibleFrom="sm" leftSection={<IconArrowsLeftRight size={16} />} onClick={openTransfer}>转账</Button>
+            <Button size="sm" visibleFrom="sm" leftSection={<IconPlus size={16} />} onClick={() => setNewOpened(true)}>新增账户</Button>
+            <ActionIcon variant="subtle" size="lg" hiddenFrom="sm" onClick={openTransfer} aria-label="转账"><IconArrowsLeftRight size={20} /></ActionIcon>
+            <ActionIcon variant="subtle" size="lg" hiddenFrom="sm" onClick={() => setNewOpened(true)} aria-label="新增账户"><IconPlus size={22} /></ActionIcon>
+          </>
+        )}
+      />
+      <div className="page-body">
+        <Stack gap="sm">
+          <SummaryBar
+            items={[
+              { label: '资产', value: money(assets), className: 'income' },
+              { label: '负债', value: money(liabilities), className: 'expense' },
+              { label: '净资产', value: money(assets - liabilities) },
+            ]}
+          />
 
-      {accounts.length > 0 && (
-        <div className="summary-cards">
-          <div className="card income">
-            <span className="label">总资产</span>
-            <span className="value">{fmt(assets)}</span>
-          </div>
-          <div className="card expense">
-            <span className="label">总负债</span>
-            <span className="value">{fmt(liabilities)}</span>
-          </div>
-          <div className="card balance">
-            <span className="label">净资产</span>
-            <span className="value">{fmt(assets - liabilities)}</span>
-          </div>
-        </div>
-      )}
-
-      {accounts.length === 0 ? (
-        <p className="empty-card">还没有账户，先在下面添加一个吧</p>
-      ) : (
-        <div className="account-grid">
-          {accounts.map((a) => (
-            <div key={a.id} className="account-card" style={{ '--account-color': a.color }}>
-              <div className="account-card-head">
-                <span className="account-name">{a.name}</span>
-                <span className="tag">{a.type === 'credit_card' ? '信用卡' : '银行账户'}</span>
-              </div>
-              <div className={`balance account-balance ${balanceClass(a.balance)}`}>{fmt(a.balance)}</div>
-              <div className="account-actions">
-                <button type="button" className="link-btn" onClick={() => handleAdjust(a)}>调整余额</button>
-                <button type="button" className="link-btn danger" onClick={() => handleDelete(a)}>删除</button>
-              </div>
+          {accounts.length === 0 ? (
+            <div className="card empty-state">
+              <Text size="sm" c="dimmed" mb="xs">还没有账户</Text>
+              <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setNewOpened(true)}>新增账户</Button>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            GROUPS.map((g) => {
+              const list = accounts.filter((a) => a.type === g.type);
+              if (list.length === 0) return null;
+              const groupTotal = list.reduce((s, a) => s + a.balance, 0);
+              return (
+                <div key={g.type} className="card">
+                  <div className="list-group-title">
+                    <span>{g.label}</span>
+                    <span className={groupTotal < 0 ? 'expense' : 'income'}>{money(groupTotal)}</span>
+                  </div>
+                  {list.map((a) => (
+                    <Menu key={a.id} position="bottom-end" withinPortal shadow="md" width={160}>
+                      <Menu.Target>
+                        <button type="button" className="list-row">
+                          <span className="dot" style={{ background: a.color }} />
+                          <span className="list-row-main">{a.name}</span>
+                          <b className={a.balance < 0 ? 'expense' : 'income'}>{money(a.balance)}</b>
+                          <IconDotsVertical size={16} color="var(--mantine-color-gray-5)" />
+                        </button>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item leftSection={<IconScale size={16} />} onClick={() => setAdjusting(a)}>调整余额</Menu.Item>
+                        <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => handleDelete(a)}>删除账户</Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  ))}
+                </div>
+              );
+            })
+          )}
+        </Stack>
+      </div>
 
-      <section className="add-form-section">
-        <h2>转账</h2>
-        <p className="hint">在自己的账户之间转移资金（比如还信用卡欠款），不计入收入/支出统计，只会影响账户余额。</p>
-        <form onSubmit={handleTransfer} className="tx-form">
-          <div className="tx-form-row">
-            <label>从
-              <AccountSelect accounts={accounts} value={fromAccountId} onChange={setFromAccountId} />
-            </label>
-            <label>到
-              <AccountSelect accounts={accounts} value={toAccountId} onChange={setToAccountId} />
-            </label>
-            <label>金额
-              <input type="number" step="0.01" min="0.01" required value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} />
-            </label>
-            <label>日期
-              <input type="date" required value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
-            </label>
-            <label className="grow">备注
-              <input type="text" placeholder="选填" value={transferDescription} onChange={(e) => setTransferDescription(e.target.value)} />
-            </label>
-            <button type="submit" className="btn primary">转账</button>
-          </div>
-        </form>
-      </section>
+      <NewAccountModal opened={newOpened} onClose={() => setNewOpened(false)} onCreated={refreshAccounts} />
 
-      <section className="add-form-section">
-        <h2>新增账户</h2>
-        <p className="hint">信用卡如果当前有欠款，初始余额填负数（比如欠 2000 就填 -2000）。</p>
-        <form onSubmit={handleAdd} className="tx-form">
-          <div className="tx-form-row">
-            <label className="grow">名称
-              <input type="text" placeholder="例如：招商银行储蓄卡" required value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label>类型
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="bank">银行账户</option>
-                <option value="credit_card">信用卡</option>
-              </select>
-            </label>
-            <label>初始余额
-              <input type="number" step="0.01" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} />
-            </label>
-            <label>颜色
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
-            <button type="submit" className="btn primary">添加账户</button>
-          </div>
-        </form>
-      </section>
-    </section>
+      <Modal opened={!!adjusting} onClose={() => setAdjusting(null)} title={<Text fw={700}>调整「{adjusting?.name}」余额</Text>} centered>
+        {adjusting && <AdjustModal key={adjusting.id} account={adjusting} onClose={() => setAdjusting(null)} onAdjusted={refreshAccounts} />}
+      </Modal>
+
+      <TransactionDrawer
+        opened={transfer.opened}
+        onClose={() => setTransfer((t) => ({ ...t, opened: false }))}
+        onSaved={refreshAccounts}
+        defaultMode="transfer"
+        defaultDate={todayStr()}
+        formKey={transfer.key}
+      />
+    </>
   );
 }

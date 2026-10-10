@@ -4,7 +4,7 @@
 
 ## 这几个目录是什么关系
 
-- **[`web/`](web)** —— 现在的主力前端，React（Vite 打包）。界面重写过，但数据层原理没变：浏览器直连 Supabase，登录和数据权限都靠 Supabase Auth + 数据库的 **Row Level Security** 保证，没有经过任何后端转发
+- **[`web/`](web)** —— 现在的主力前端，React（Vite 打包）+ Mantine 组件库，界面仿 Money Manager，手机端是底部标签栏的 App 式布局。界面重写过，但数据层原理没变：浏览器直连 Supabase，登录和数据权限都靠 Supabase Auth + 数据库的 **Row Level Security** 保证，没有经过任何后端转发
 - **[`legacy-static/`](legacy-static)** —— 早期的纯 HTML/CSS/原生 JS 版本，功能上跟 `web/` 对等，保留下来当参考/备用，目前没有部署
 - **[`server/`](server)** —— 只做一件浏览器做不到的事：**定时账单真正按时自动生成**。没有常驻服务器，靠 GitHub Actions 定时跑一个脚本，具体看 [`server/README.md`](server/README.md)
 - **[`sql/schema.sql`](sql/schema.sql)** —— 两套前端共用同一份数据库结构
@@ -25,7 +25,7 @@ Supabase 项目 → **Authentication → Providers → Email**：
 
 ### 3. 配置前端连接的 Supabase 项目
 
-`web/src/lib/config.js` 里已经填好了默认项目的 URL 和 anon/publishable key。如果要换成自己的 Supabase 项目，不需要改代码——打开网站，登录页底部或登录后顶部导航都有「Supabase 设置」入口，直接粘贴自己项目的 URL + key，保存后只存在当前浏览器的 `localStorage` 里，不影响默认配置和其他访问者。也可以直接改 `web/src/lib/config.js` 里的默认值。
+`web/src/lib/config.js` 里已经填好了默认项目的 URL 和 anon/publishable key。如果要换成自己的 Supabase 项目，不需要改代码——打开网站，登录页底部、登录后手机端「更多」页或电脑端侧边栏都有「Supabase 设置」入口，直接粘贴自己项目的 URL + key，保存后只存在当前浏览器的 `localStorage` 里，不影响默认配置和其他访问者。也可以直接改 `web/src/lib/config.js` 里的默认值。
 
 > anon/publishable key 设计上就是公开的（本来就会被打进前端代码里），真正的数据安全依赖第 1 步开启的 RLS 策略，**千万不要把 `service_role` key 放到前端**。
 
@@ -63,7 +63,7 @@ npm run dev
 - **多币种**：记一笔账时可以选择金额是哪种货币（CAD/USD/EUR/...），非 CAD 会调用 [Frankfurter](https://www.frankfurter.app) 实时汇率接口自动换算成本位货币 CAD 存进数据库，原始金额和当时用的汇率也会一并记下来，列表里会标出"原始 XX USD"这种提示
 - **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），[`server/`](server) 里的 GitHub Actions 定时任务会按真实时间表自动生成交易；打开网站时也会顺手补一次，双重保险
 - 可安装为 PWA，离线也能打开 app 外壳
-- 顶部导航右侧有个小标签显示当前部署的 commit（例如 `v238ddc3`），鼠标悬停能看到构建时间，用来确认网站是不是已经更新到最新版本
+- 电脑端侧边栏底部 / 手机端「更多」页底部显示当前部署的 commit（例如 `v238ddc3`），鼠标悬停能看到构建时间，用来确认网站是不是已经更新到最新版本
 
 ## Supabase 免费版会自动暂停
 

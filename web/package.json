@@ -10,7 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mantine/core": "^9.7.1",
+    "@mantine/hooks": "^9.7.1",
+    "@mantine/modals": "^9.7.1",
+    "@mantine/notifications": "^9.7.1",
     "@supabase/supabase-js": "^2.115.0",
+    "@tabler/icons-react": "^3.49.0",
     "chart.js": "^4.5.1",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",

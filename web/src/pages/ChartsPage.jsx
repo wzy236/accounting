@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
+import { SegmentedControl, Stack, Tabs } from '@mantine/core';
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { Chart as ChartJS, ArcElement, Tooltip } from 'chart.js';
 import { Pie } from 'react-chartjs-2';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
-import { useToast } from '../lib/ToastContext.jsx';
+import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
 import { listTransactionsInRange, aggregateByTopCategory, aggregateSubcategories } from '../lib/api.js';
-import { defaultMonth, todayStr, fmt } from '../lib/format.js';
+import {
+  defaultMonth, todayStr, fmt, money, monthLabel, shiftMonth, shiftDay, WEEKDAYS, weekday,
+} from '../lib/format.js';
+import PageHeader, { PeriodSwitcher } from '../components/PageHeader.jsx';
+import { dayTotals } from '../lib/txGroups.js';
 
 ChartJS.register(ArcElement, Tooltip);
 
-const PERIODS = [
-  { key: 'year', label: '年' },
-  { key: 'month', label: '月' },
-  { key: 'day', label: '日' },
-];
-
 // 新建分类默认都是同一个颜色，子分类撞色时饼图分不清，撞色的换成调色板里还没用过的颜色
-const PALETTE = ['#e07a5f', '#3d5a80', '#f2cc8f', '#81b29a', '#6d597a', '#b56576', '#457b9d', '#2a9d8f', '#e9c46a', '#f4a261', '#a8dadc', '#8d99ae'];
+const PALETTE = ['#f25a5a', '#f59f45', '#f2c94c', '#6fcf97', '#2f9e8f', '#2f7ee6', '#5b6ee8', '#9b6bd8', '#e86fa8', '#8d99ae', '#b5835a', '#4fb3d9'];
 
 function withDistinctColors(items) {
   const used = new Set();
@@ -28,52 +28,52 @@ function withDistinctColors(items) {
   });
 }
 
-const pad = (n) => String(n).padStart(2, '0');
-
-function nextDay(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(y, m - 1, d + 1);
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+/** 当前选中的年/月/日对应的查询区间 [start, end)。 */
+function periodRange(period, anchor) {
+  if (period === 'year') return { start: `${anchor.year}-01-01`, end: `${anchor.year + 1}-01-01` };
+  if (period === 'month') return { start: `${anchor.month}-01`, end: `${shiftMonth(anchor.month, 1)}-01` };
+  return { start: anchor.day, end: shiftDay(anchor.day, 1) };
 }
 
-/** 当前选中的年/月/日对应的查询区间 [start, end)；输入框被清空时返回 null。 */
-function periodRange(period, year, month, day) {
-  if (period === 'year') return year ? { start: `${year}-01-01`, end: `${Number(year) + 1}-01-01` } : null;
-  if (period === 'month') {
-    if (!month) return null;
-    const [y, m] = month.split('-').map(Number);
-    const next = m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
-    return { start: `${month}-01`, end: `${next}-01` };
-  }
-  return day ? { start: day, end: nextDay(day) } : null;
+function periodLabel(period, anchor) {
+  if (period === 'year') return `${anchor.year}年`;
+  if (period === 'month') return monthLabel(anchor.month);
+  const [, m, d] = anchor.day.split('-').map(Number);
+  return `${m}月${d}日 周${WEEKDAYS[weekday(anchor.day)]}`;
 }
 
-function PieBlock({ title, items, drilledName, onDrill, onBack }) {
-  const data = withDistinctColors(items);
-  const total = data.reduce((s, d) => s + d.total, 0);
-  const canDrill = (d) => !drilledName && d?.hasChildren;
+function shiftAnchor(period, anchor, delta) {
+  if (period === 'year') return { ...anchor, year: anchor.year + delta };
+  if (period === 'month') return { ...anchor, month: shiftMonth(anchor.month, delta) };
+  return { ...anchor, day: shiftDay(anchor.day, delta) };
+}
+
+function CategoryBreakdown({ type, transactions, categories }) {
+  const [drillId, setDrillId] = useState(null);
+  const drilled = drillId ? aggregateSubcategories(transactions, type, drillId, categories) : null;
+  const items = withDistinctColors(drilled ? drilled.items : aggregateByTopCategory(transactions, type, categories));
+  const total = items.reduce((s, d) => s + d.total, 0);
+  const canDrill = (d) => !drilled && d?.hasChildren;
 
   return (
-    <section className="chart-card">
-      <h2>
-        {drilledName ? (
-          <>
-            <button type="button" className="link-btn crumb" onClick={onBack}>{title}</button>
-            <span className="crumb-sep">›</span>{drilledName}
-          </>
-        ) : title}
-        <span className="muted">（合计 {fmt(total)}）</span>
-      </h2>
+    <div className="card">
+      {drilled && (
+        <button type="button" className="list-row" onClick={() => setDrillId(null)}>
+          <IconChevronLeft size={18} />
+          <span className="list-row-main"><b>{drilled.parent?.name}</b> <span className="muted">· 子分类</span></span>
+          <b className={type}>{money(total)}</b>
+        </button>
+      )}
 
-      {data.length === 0 ? (
-        <p className="empty">这段时间暂无记录</p>
+      {items.length === 0 ? (
+        <div className="empty-state">这段时间暂无{type === 'income' ? '收入' : '支出'}记录</div>
       ) : (
         <>
           <div className="pie-wrap">
             <Pie
               data={{
-                labels: data.map((d) => d.name),
-                datasets: [{ data: data.map((d) => d.total), backgroundColor: data.map((d) => d.color) }],
+                labels: items.map((d) => d.name),
+                datasets: [{ data: items.map((d) => d.total), backgroundColor: items.map((d) => d.color), borderWidth: 2 }],
               }}
               options={{
                 plugins: {
@@ -88,62 +88,37 @@ function PieBlock({ title, items, drilledName, onDrill, onBack }) {
                   },
                 },
                 onClick: (_evt, elements) => {
-                  const d = data[elements[0]?.index];
-                  if (canDrill(d)) onDrill(d.id);
+                  const d = items[elements[0]?.index];
+                  if (canDrill(d)) setDrillId(d.id);
                 },
                 onHover: (evt, elements) => {
-                  evt.native.target.style.cursor = canDrill(data[elements[0]?.index]) ? 'pointer' : 'default';
+                  evt.native.target.style.cursor = canDrill(items[elements[0]?.index]) ? 'pointer' : 'default';
                 },
               }}
             />
           </div>
 
-          <ul className="stat-list">
-            {data.map((d) => {
-              const pct = total ? ((d.total / total) * 100).toFixed(1) : '0.0';
-              const row = (
+          <div style={{ borderTop: '1px solid var(--mm-border)' }}>
+            {items.map((d) => {
+              const pct = total ? Math.round((d.total / total) * 100) : 0;
+              const content = (
                 <>
-                  <span className="swatch" style={{ background: d.color }}></span>
-                  <span className="stat-name">{d.name}</span>
-                  <span className="stat-pct">{pct}%</span>
-                  <span className="stat-amount">{fmt(d.total)}</span>
-                  <span className="stat-arrow">{canDrill(d) ? '›' : ''}</span>
+                  <span className="pct-badge" style={{ background: d.color }}>{pct}%</span>
+                  <span className="list-row-main">{d.name}</span>
+                  <span>{money(d.total)}</span>
+                  {canDrill(d) && <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />}
                 </>
               );
-              return (
-                <li key={d.id}>
-                  {canDrill(d)
-                    ? <button type="button" className="stat-row clickable" onClick={() => onDrill(d.id)}>{row}</button>
-                    : <div className="stat-row">{row}</div>}
-                </li>
+              return canDrill(d) ? (
+                <button key={d.id} type="button" className="list-row" onClick={() => setDrillId(d.id)}>{content}</button>
+              ) : (
+                <div key={d.id} className="list-row">{content}</div>
               );
             })}
-          </ul>
-
-          {drilledName ? (
-            <button type="button" className="link-btn" onClick={onBack}>← 返回全部分类</button>
-          ) : data.some(canDrill) && (
-            <p className="hint">点击饼图或带 › 的分类，可以查看里面的子分类</p>
-          )}
+          </div>
         </>
       )}
-    </section>
-  );
-}
-
-function CategoryPie({ title, type, transactions, categories }) {
-  const [drillId, setDrillId] = useState(null);
-  const drilled = drillId ? aggregateSubcategories(transactions, type, drillId, categories) : null;
-  const items = drilled ? drilled.items : aggregateByTopCategory(transactions, type, categories);
-
-  return (
-    <PieBlock
-      title={title}
-      items={items}
-      drilledName={drilled?.parent?.name}
-      onDrill={setDrillId}
-      onBack={() => setDrillId(null)}
-    />
+    </div>
   );
 }
 
@@ -152,19 +127,14 @@ export default function ChartsPage() {
   const showToast = useToast();
   const { categories, ready } = useData();
 
-  const thisYear = new Date().getFullYear();
   const [period, setPeriod] = useState('month');
-  const [year, setYear] = useState(String(thisYear));
-  const [month, setMonth] = useState(defaultMonth());
-  const [day, setDay] = useState(todayStr());
+  const [anchor, setAnchor] = useState(() => ({ year: new Date().getFullYear(), month: defaultMonth(), day: todayStr() }));
+  const [type, setType] = useState('expense');
   const [transactions, setTransactions] = useState([]);
 
-  const range = periodRange(period, year, month, day);
-  const start = range?.start;
-  const end = range?.end;
+  const { start, end } = periodRange(period, anchor);
 
   const reload = useCallback(async () => {
-    if (!start) return;
     try {
       setTransactions(await listTransactionsInRange(client, start, end));
     } catch (e) {
@@ -177,40 +147,41 @@ export default function ChartsPage() {
     if (ready) reload();
   }, [ready, reload]);
 
-  const years = Array.from({ length: 11 }, (_, i) => String(thisYear + 1 - i));
+  const { income, expense } = dayTotals(transactions);
 
   return (
-    <section>
-      <div className="page-header">
-        <h1>📊 统计图表</h1>
-        <div className="period-controls">
-          <div className="segmented" role="tablist">
-            {PERIODS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                role="tab"
-                aria-selected={period === p.key}
-                className={period === p.key ? 'active' : undefined}
-                onClick={() => setPeriod(p.key)}
-              >
-                {p.label}
-              </button>
-            ))}
+    <>
+      <PageHeader
+        title="统计"
+        center={(
+          <PeriodSwitcher
+            label={periodLabel(period, anchor)}
+            onPrev={() => setAnchor((a) => shiftAnchor(period, a, -1))}
+            onNext={() => setAnchor((a) => shiftAnchor(period, a, 1))}
+          />
+        )}
+        right={(
+          <SegmentedControl
+            size="xs"
+            data={[{ label: '年', value: 'year' }, { label: '月', value: 'month' }, { label: '日', value: 'day' }]}
+            value={period}
+            onChange={setPeriod}
+          />
+        )}
+      />
+      <div className="page-body">
+        <Stack gap="sm">
+          <div className="card">
+            <Tabs value={type} onChange={(v) => setType(v || 'expense')} color={type === 'income' ? 'blue' : 'coral'}>
+              <Tabs.List grow>
+                <Tabs.Tab value="income">收入 <span className="income">{money(income)}</span></Tabs.Tab>
+                <Tabs.Tab value="expense">支出 <span className="expense">{money(expense)}</span></Tabs.Tab>
+              </Tabs.List>
+            </Tabs>
           </div>
-          {period === 'year' && (
-            <select value={year} onChange={(e) => setYear(e.target.value)}>
-              {years.map((y) => <option key={y} value={y}>{y} 年</option>)}
-            </select>
-          )}
-          {period === 'month' && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />}
-          {period === 'day' && <input type="date" value={day} onChange={(e) => setDay(e.target.value)} />}
-        </div>
+          <CategoryBreakdown key={type} type={type} transactions={transactions} categories={categories} />
+        </Stack>
       </div>
-      <div className="chart-columns">
-        <CategoryPie title="支出分布" type="expense" transactions={transactions} categories={categories} />
-        <CategoryPie title="收入分布" type="income" transactions={transactions} categories={categories} />
-      </div>
-    </section>
+    </>
   );
 }

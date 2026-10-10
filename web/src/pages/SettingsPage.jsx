@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Alert, Button, Code, Group, Paper, Stack, Text, TextInput, Title } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
+import { confirmAction } from '../lib/confirm.jsx';
 
 export default function SettingsPage() {
   const { config, isCustomConfig, applyConfig, resetConfig } = useSupabase();
@@ -27,8 +30,9 @@ export default function SettingsPage() {
     setSuccess('已保存，正在切换项目…');
   }
 
-  function handleReset() {
-    if (!window.confirm('恢复默认 Supabase 配置？')) return;
+  async function handleReset() {
+    const ok = await confirmAction({ title: '恢复默认配置', message: '恢复使用默认的 Supabase 项目？', confirmLabel: '恢复', danger: false });
+    if (!ok) return;
     resetConfig();
     setUrl(config.url);
     setAnonKey('');
@@ -36,32 +40,32 @@ export default function SettingsPage() {
 
   return (
     <div className="auth-wrap">
-      <div className="auth-card">
-        <h1>⚙️ Supabase 设置</h1>
-        <p className="hint">
-          默认已经配置好一个可用的 Supabase 项目。如果你想用自己的 Supabase 项目存数据，
-          在下面粘贴你自己项目的 <strong>Project URL</strong> 和 <strong>anon / publishable key</strong>
-          （在 Supabase 后台 Project Settings → API 页面可以找到），并确保已经在该项目的 SQL Editor
-          里执行过仓库里的 <code>sql/schema.sql</code>。配置只保存在你当前这台设备的浏览器里，不会影响其他访问者。
-        </p>
-        <p className="hint">{isCustomConfig ? `当前使用自定义项目：${config.url}` : `当前使用默认项目：${config.url}`}</p>
-        <form onSubmit={handleSubmit}>
-          {error && <p className="error">{error}</p>}
-          {success && <p className="success">{success}</p>}
-          <label>Supabase Project URL
-            <input type="url" placeholder="https://xxxx.supabase.co" required value={url} onChange={(e) => setUrl(e.target.value)} />
-          </label>
-          <label>anon / publishable key
-            <input type="text" placeholder="sb_publishable_... 或 eyJ..." required value={anonKey} onChange={(e) => setAnonKey(e.target.value)} />
-          </label>
-          <button type="submit" className="btn primary">保存并切换</button>
-        </form>
-        <p className="auth-switch">
-          <a href="#" onClick={(e) => { e.preventDefault(); handleReset(); }}>恢复默认配置</a>
-          &nbsp;|&nbsp;
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate(-1); }}>返回</a>
-        </p>
-      </div>
+      <Paper w="100%" maw={520} p="xl" radius="lg" shadow="md" withBorder>
+        <Stack gap="md">
+          <Title order={3}>Supabase 设置</Title>
+          <Text size="sm" c="dimmed">
+            默认已经配置好一个可用的 Supabase 项目。如果想用自己的项目存数据，在下面粘贴它的 <b>Project URL</b> 和
+            <b> anon / publishable key</b>（Supabase 后台 Project Settings → API），并确保已经在该项目的 SQL Editor 里执行过
+            仓库里的 <Code>sql/schema.sql</Code>。配置只保存在当前这台设备的浏览器里。
+          </Text>
+          <Alert variant="light" color={isCustomConfig ? 'coral' : 'gray'}>
+            {isCustomConfig ? '当前使用自定义项目：' : '当前使用默认项目：'}{config.url}
+          </Alert>
+          <form onSubmit={handleSubmit}>
+            <Stack gap="md">
+              {error && <Alert color="red" variant="light">{error}</Alert>}
+              {success && <Alert color="teal" variant="light">{success}</Alert>}
+              <TextInput label="Supabase Project URL" type="url" placeholder="https://xxxx.supabase.co" required value={url} onChange={(e) => setUrl(e.target.value)} />
+              <TextInput label="anon / publishable key" placeholder="sb_publishable_... 或 eyJ..." required value={anonKey} onChange={(e) => setAnonKey(e.target.value)} />
+              <Button type="submit">保存并切换</Button>
+            </Stack>
+          </form>
+          <Group justify="space-between">
+            <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate(-1)}>返回</Button>
+            <Button variant="subtle" color="gray" onClick={handleReset}>恢复默认配置</Button>
+          </Group>
+        </Stack>
+      </Paper>
     </div>
   );
 }

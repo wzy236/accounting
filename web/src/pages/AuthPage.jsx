@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Alert, Anchor, Button, Paper, PasswordInput, SegmentedControl, Stack, Text, TextInput, Title,
+} from '@mantine/core';
+import { IconNotebook } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 
 export default function AuthPage() {
@@ -7,89 +11,91 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState('login');
 
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regConfirm, setRegConfirm] = useState('');
-  const [regError, setRegError] = useState('');
-  const [regSuccess, setRegSuccess] = useState('');
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setLoginError('');
-    const { error } = await client.auth.signInWithPassword({ email: loginEmail.trim(), password: loginPassword });
-    if (error) {
-      setLoginError(error.status === 400 ? '邮箱或密码错误' : error.message);
-    }
+  function switchMode(m) {
+    setMode(m);
+    setError('');
+    setSuccess('');
   }
 
-  async function handleRegister(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    setRegError('');
-    setRegSuccess('');
-    if (regPassword !== regConfirm) {
-      setRegError('两次输入的密码不一致');
+    setError('');
+    setSuccess('');
+    if (mode === 'register' && password !== confirm) {
+      setError('两次输入的密码不一致');
       return;
     }
-    const { data, error } = await client.auth.signUp({ email: regEmail.trim(), password: regPassword });
-    if (error) {
-      setRegError(error.message);
-      return;
-    }
-    if (!data.session) {
-      setRegSuccess('注册成功，请前往邮箱完成确认后再登录。');
-      setRegEmail('');
-      setRegPassword('');
-      setRegConfirm('');
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error: err } = await client.auth.signInWithPassword({ email: email.trim(), password });
+        if (err) setError(err.status === 400 ? '邮箱或密码错误' : err.message);
+      } else {
+        const { data, error: err } = await client.auth.signUp({ email: email.trim(), password });
+        if (err) {
+          setError(err.message);
+        } else if (!data.session) {
+          setSuccess('注册成功，请前往邮箱完成确认后再登录。');
+          setPassword('');
+          setConfirm('');
+        }
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
     <div className="auth-wrap">
-      <div className="auth-card">
-        <h1>📒 记账本</h1>
+      <Paper w="100%" maw={400} p="xl" radius="lg" shadow="md" withBorder>
+        <Stack gap="lg">
+          <Stack gap={6} align="center">
+            <span className="brand-logo" style={{ width: 52, height: 52, borderRadius: 16 }}><IconNotebook size={30} /></span>
+            <Title order={3}>记账本</Title>
+            <Text size="sm" c="dimmed">记录每一笔收支</Text>
+          </Stack>
 
-        {mode === 'login' ? (
-          <>
-            <form onSubmit={handleLogin}>
-              {loginError && <p className="error">{loginError}</p>}
-              <label>邮箱
-                <input type="email" required autoComplete="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
-              </label>
-              <label>密码
-                <input type="password" required autoComplete="current-password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
-              </label>
-              <button type="submit" className="btn primary">登录</button>
-            </form>
-            <p className="auth-switch">还没有账号？<a href="#" onClick={(e) => { e.preventDefault(); setMode('register'); }}>立即注册</a></p>
-          </>
-        ) : (
-          <>
-            <form onSubmit={handleRegister}>
-              {regError && <p className="error">{regError}</p>}
-              {regSuccess && <p className="success">{regSuccess}</p>}
-              <label>邮箱
-                <input type="email" required autoComplete="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
-              </label>
-              <label>密码（至少 6 位）
-                <input type="password" minLength={6} required autoComplete="new-password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
-              </label>
-              <label>确认密码
-                <input type="password" minLength={6} required autoComplete="new-password" value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} />
-              </label>
-              <button type="submit" className="btn primary">注册</button>
-            </form>
-            <p className="auth-switch">已有账号？<a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); }}>直接登录</a></p>
-          </>
-        )}
+          <SegmentedControl
+            fullWidth
+            data={[{ label: '登录', value: 'login' }, { label: '注册', value: 'register' }]}
+            value={mode}
+            onChange={switchMode}
+          />
 
-        <p className="auth-switch">
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/settings'); }}>使用自己的 Supabase 项目 / Supabase 设置</a>
-        </p>
-      </div>
+          <form onSubmit={handleSubmit}>
+            <Stack gap="md">
+              {error && <Alert color="red" variant="light">{error}</Alert>}
+              {success && <Alert color="teal" variant="light">{success}</Alert>}
+              <TextInput label="邮箱" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <PasswordInput
+                label={mode === 'register' ? '密码（至少 6 位）' : '密码'}
+                required
+                minLength={mode === 'register' ? 6 : undefined}
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {mode === 'register' && (
+                <PasswordInput label="确认密码" required minLength={6} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              )}
+              <Button type="submit" fullWidth size="md" loading={loading}>{mode === 'login' ? '登录' : '注册'}</Button>
+            </Stack>
+          </form>
+
+          <Text size="xs" ta="center">
+            <Anchor component="button" type="button" size="xs" c="dimmed" onClick={() => navigate('/settings')}>
+              使用自己的 Supabase 项目 / Supabase 设置
+            </Anchor>
+          </Text>
+        </Stack>
+      </Paper>
     </div>
   );
 }
