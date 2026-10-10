@@ -113,7 +113,8 @@ alter table public.transactions add constraint transactions_source_check
   check (source in ('manual','pdf_import','recurring','adjustment','transfer'));
 
 -- ========== 定时账单表 ==========
--- frequency = 'daily'：每天；'weekly'：按 day_of_week（0=周日...6=周六）；'monthly'：按 day_of_month（超过当月天数自动取当月最后一天）。
+-- frequency = 'daily'：每天；'weekly' / 'biweekly'：从 next_due_date 起每 7 / 14 天一次（day_of_week 记的是星期几，用于显示）；
+-- 'monthly'：按 day_of_month（超过当月天数自动取当月最后一天）。
 create table if not exists public.recurring_bills (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -122,7 +123,7 @@ create table if not exists public.recurring_bills (
   amount numeric(12,2) not null check (amount > 0),
   category_id uuid references public.categories(id) on delete set null,
   account_id uuid references public.accounts(id) on delete set null,
-  frequency text not null check (frequency in ('daily','weekly','monthly')),
+  frequency text not null check (frequency in ('daily','weekly','biweekly','monthly')),
   day_of_week int check (day_of_week between 0 and 6),
   day_of_month int check (day_of_month between 1 and 31),
   next_due_date date not null,
@@ -133,6 +134,11 @@ create table if not exists public.recurring_bills (
 );
 
 create index if not exists idx_recurring_bills_user on public.recurring_bills (user_id, active);
+
+-- 已经建过表的项目：放宽 frequency 的取值，加上“每两周”（biweekly）
+alter table public.recurring_bills drop constraint if exists recurring_bills_frequency_check;
+alter table public.recurring_bills add constraint recurring_bills_frequency_check
+  check (frequency in ('daily','weekly','biweekly','monthly'));
 
 alter table public.recurring_bills enable row level security;
 
