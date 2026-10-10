@@ -204,7 +204,7 @@ export default function AccountsPage() {
                         </button>
                       </Menu.Target>
                       <Menu.Dropdown>
-                        <Menu.Item leftSection={<IconList size={16} />} onClick={() => navigate(`/transactions?accounts=${a.id}`)}>查看记录</Menu.Item>
+                        <Menu.Item leftSection={<IconList size={16} />} onClick={() => navigate(`/transactions?accounts=${a.id}&range=all`)}>查看记录</Menu.Item>
                         <Menu.Item leftSection={<IconScale size={16} />} onClick={() => setAdjusting(a)}>调整余额</Menu.Item>
                         <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => handleDelete(a)}>删除账户</Menu.Item>
                       </Menu.Dropdown>
