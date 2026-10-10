@@ -2,23 +2,68 @@ import { useState } from 'react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/ToastContext.jsx';
 import { useData } from '../lib/DataContext.jsx';
-import { createCategory, deleteCategory } from '../lib/api.js';
+import { createCategory, updateCategory, deleteCategory } from '../lib/api.js';
 import { buildCategoryTree } from '../lib/format.js';
 
-function CategoryList({ list, onDelete }) {
+function CategoryRow({ cat, depth, hasChildren, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(cat.name);
+
+  function startEditing() {
+    setDraft(cat.name);
+    setEditing(true);
+  }
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === cat.name) {
+      setEditing(false);
+      return;
+    }
+    if (await onRename(cat, trimmed)) setEditing(false);
+  }
+
+  return (
+    <li className={depth ? 'subcategory' : undefined}>
+      <span className="swatch" style={{ background: cat.color }}></span>
+      {editing ? (
+        <form className="rename-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
+          <input
+            type="text"
+            autoFocus
+            required
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+          />
+          <button type="submit" className="link-btn">保存</button>
+          <button type="button" className="link-btn" onClick={() => setEditing(false)}>取消</button>
+        </form>
+      ) : (
+        <>
+          <span className="cat-name">{cat.name}</span>
+          <button type="button" className="link-btn" onClick={startEditing}>改名</button>
+          <button type="button" className="link-btn danger" onClick={() => onDelete(cat, hasChildren)}>删除</button>
+        </>
+      )}
+    </li>
+  );
+}
+
+function CategoryList({ list, onRename, onDelete }) {
   if (list.length === 0) return <ul className="category-list"><li className="empty">暂无分类</li></ul>;
   return (
     <ul className="category-list">
-      {buildCategoryTree(list).map(({ cat, depth }) => {
-        const hasChildren = list.some((c) => c.parent_id === cat.id);
-        return (
-          <li key={cat.id} className={depth ? 'subcategory' : undefined}>
-            <span className="swatch" style={{ background: cat.color }}></span>
-            <span className="cat-name">{cat.name}</span>
-            <button type="button" className="link-btn danger" onClick={() => onDelete(cat, hasChildren)}>删除</button>
-          </li>
-        );
-      })}
+      {buildCategoryTree(list).map(({ cat, depth }) => (
+        <CategoryRow
+          key={cat.id}
+          cat={cat}
+          depth={depth}
+          hasChildren={list.some((c) => c.parent_id === cat.id)}
+          onRename={onRename}
+          onDelete={onDelete}
+        />
+      ))}
     </ul>
   );
 }
@@ -54,6 +99,19 @@ export default function CategoriesPage() {
       refreshCategories();
     } catch (e) {
       showToast('添加失败：' + (e.message?.includes('duplicate') ? '分类名已存在' : e.message), true);
+    }
+  }
+
+  // 交易记录、定时账单都是按分类 id 关联的，改名后各处显示的名字会自动跟着变
+  async function handleRename(cat, newName) {
+    try {
+      await updateCategory(client, cat.id, { name: newName });
+      showToast('已改名');
+      refreshCategories();
+      return true;
+    } catch (e) {
+      showToast('改名失败：' + (e.message?.includes('duplicate') ? '同类型下已经有叫这个名字的分类了' : e.message), true);
+      return false;
     }
   }
 
@@ -109,11 +167,11 @@ export default function CategoriesPage() {
       <div className="category-columns">
         <section>
           <h2>支出分类</h2>
-          <CategoryList list={expenseCategories} onDelete={handleDelete} />
+          <CategoryList list={expenseCategories} onRename={handleRename} onDelete={handleDelete} />
         </section>
         <section>
           <h2>收入分类</h2>
-          <CategoryList list={incomeCategories} onDelete={handleDelete} />
+          <CategoryList list={incomeCategories} onRename={handleRename} onDelete={handleDelete} />
         </section>
       </div>
     </section>
