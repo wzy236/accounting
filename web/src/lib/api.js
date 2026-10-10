@@ -328,6 +328,32 @@ export async function updateRecurringBill(client, id, fields) {
   return unwrap(await client.from('recurring_bills').update(fields).eq('id', id).select());
 }
 
+/* ================= 预算 · 预计项目 ================= */
+
+export async function listBudgetItems(client) {
+  return unwrap(await client.from('budget_items').select('*').order('type').order('created_at'));
+}
+
+function budgetRow({ name, type, amount, frequency, category_id, included }) {
+  return { name, type, amount, frequency, category_id: category_id || null, included: included !== false };
+}
+
+export async function createBudgetItem(client, item) {
+  return unwrap(await client.from('budget_items').insert(budgetRow(item)).select());
+}
+
+export async function updateBudgetItem(client, id, fields) {
+  return unwrap(await client.from('budget_items').update(fields).eq('id', id).select());
+}
+
+export async function editBudgetItem(client, id, item) {
+  return updateBudgetItem(client, id, budgetRow(item));
+}
+
+export async function deleteBudgetItem(client, id) {
+  return unwrap(await client.from('budget_items').delete().eq('id', id));
+}
+
 export async function deleteRecurringBill(client, id) {
   return unwrap(await client.from('recurring_bills').delete().eq('id', id));
 }
