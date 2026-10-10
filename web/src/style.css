@@ -1,11 +1,12 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #f4f6fb;
   --card-bg: #ffffff;
-  --text: #1e2430;
-  --muted: #6b7280;
+  --text: #1a2030;
+  --muted: #667085;
   --muted-soft: #98a2b3;
   --primary: #3d5a80;
   --primary-dark: #2c4260;
+  --primary-light: #5b7fa6;
   --primary-soft: #e8edf4;
   --border: #e7e9ee;
   --income: #2a9d8f;
@@ -15,25 +16,32 @@
   --danger: #c0392b;
   --danger-soft: #fdecea;
 
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 9px;
+  --radius: 13px;
+  --radius-lg: 20px;
   --shadow-sm: 0 1px 2px rgba(20, 30, 50, 0.05);
-  --shadow: 0 1px 3px rgba(20, 30, 50, 0.05), 0 6px 20px rgba(20, 30, 50, 0.06);
-  --shadow-hover: 0 4px 10px rgba(20, 30, 50, 0.07), 0 14px 32px rgba(20, 30, 50, 0.09);
+  --shadow: 0 1px 3px rgba(20, 30, 50, 0.04), 0 8px 24px rgba(20, 30, 50, 0.06);
+  --shadow-hover: 0 4px 10px rgba(20, 30, 50, 0.06), 0 16px 36px rgba(20, 30, 50, 0.1);
+
+  --tap: 40px;
 }
 
 * { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   background:
     radial-gradient(1200px 500px at 8% -10%, rgba(61, 90, 128, 0.08), transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, rgba(42, 157, 143, 0.05), transparent 55%),
     var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 a { color: var(--primary); text-decoration: none; }
@@ -56,6 +64,7 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 10;
+  padding-top: env(safe-area-inset-top);
 }
 
 .topbar-inner {
@@ -63,7 +72,7 @@ a:hover { text-decoration: underline; }
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   padding: 12px 20px;
   flex-wrap: wrap;
 }
@@ -73,21 +82,34 @@ a:hover { text-decoration: underline; }
   font-size: 1.15rem;
   color: var(--text);
   letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
 
-.nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.nav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .nav a {
   color: var(--muted);
   padding: 7px 14px;
   border-radius: 999px;
   font-size: 0.92rem;
   font-weight: 500;
+  white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 .nav a:hover { background: var(--primary-soft); color: var(--primary-dark); text-decoration: none; }
-.nav a.active { color: #fff; background: var(--primary); font-weight: 600; box-shadow: var(--shadow-sm); }
+.nav a.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
 
-.user-area { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 0.88rem; }
+.user-area { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 0.88rem; flex-shrink: 0; }
 .username { font-weight: 600; color: var(--text); }
 
 /* ============ 通用布局 ============ */
@@ -140,6 +162,7 @@ input, select, button {
 input[type="text"], input[type="password"], input[type="email"], input[type="date"],
 input[type="number"], input[type="month"], input[type="file"], input[type="url"], select {
   padding: 9px 12px;
+  min-height: var(--tap);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: #fff;
@@ -166,6 +189,7 @@ input[type="color"] {
 
 .btn {
   padding: 9px 20px;
+  min-height: var(--tap);
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
@@ -174,7 +198,11 @@ input[type="color"] {
 }
 .btn:active { transform: translateY(1px); }
 
-.btn.primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+.btn.primary {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
 .btn.primary:hover { background: var(--primary-dark); box-shadow: var(--shadow); }
 
 .link-btn {
@@ -226,9 +254,9 @@ input[type="color"] {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
 }
-.card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+.card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
 
 .card .label { color: var(--muted); font-size: 0.85rem; font-weight: 500; }
 .card .value { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.01em; }
@@ -398,11 +426,51 @@ input[type="color"] {
 
 /* ============ 小屏幕适配 ============ */
 
+@media (max-width: 860px) {
+  .topbar-inner { gap: 10px; padding: 10px 16px; }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { flex-shrink: 0; }
+  .user-area { margin-left: auto; gap: 10px; }
+}
+
 @media (max-width: 640px) {
-  .container { padding: 20px 14px 60px; }
+  .container { padding: 18px 14px 60px; }
   .auth-card { padding: 28px 22px; }
   .card, .add-form-section, .chart-card { padding: 16px; }
   h1 { font-size: 1.3rem; }
-  .nav { gap: 2px; }
-  .nav a { padding: 6px 10px; font-size: 0.88rem; }
+  .nav a { padding: 7px 12px; font-size: 0.88rem; }
+  .username { display: none; }
+
+  .summary-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { min-width: 0; }
+  .card .value { font-size: 1.3rem; }
+
+  .tx-form-row { gap: 10px; }
+  .tx-form-row label { flex: 1 1 100%; min-width: 0; }
+  .tx-form-row .btn { width: 100%; }
+
+  .table-scroll { margin: 0 -14px; border-radius: 0; border-left: none; border-right: none; -webkit-overflow-scrolling: touch; }
+  .tx-table { min-width: 680px; }
+
+  .category-columns, .chart-columns { gap: 16px; }
+  .category-columns > section, .chart-card { min-width: 0; }
+
+  .toast { bottom: calc(20px + env(safe-area-inset-bottom)); left: 14px; right: 14px; transform: none; text-align: center; }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (max-width: 420px) {
+  .summary-cards { grid-template-columns: 1fr; }
 }
