@@ -1,10 +1,19 @@
-export default function AccountSelect({ accounts, value, onChange, className }) {
+import { Select } from '@mantine/core';
+
+export default function AccountSelect({ accounts, value, onChange, placeholder = '不选择', ...rest }) {
+  const data = accounts.map((a) => ({
+    value: String(a.id),
+    label: `${a.name}${a.type === 'credit_card' ? '（信用卡）' : ''}`,
+  }));
   return (
-    <select className={className} value={value || ''} onChange={(e) => onChange(e.target.value)}>
-      <option value="">不选择</option>
-      {accounts.map((a) => (
-        <option key={a.id} value={a.id}>{a.name}{a.type === 'credit_card' ? '（信用卡）' : ''}</option>
-      ))}
-    </select>
+    <Select
+      data={data}
+      value={value ? String(value) : null}
+      onChange={(v) => onChange(v || '')}
+      placeholder={placeholder}
+      clearable
+      comboboxProps={{ withinPortal: true }}
+      {...rest}
+    />
   );
 }

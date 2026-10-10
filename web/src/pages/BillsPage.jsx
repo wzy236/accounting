@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  ActionIcon, Button, Menu, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, TextInput,
+} from '@mantine/core';
+import { IconDotsVertical, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
-import { useToast } from '../lib/ToastContext.jsx';
+import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
+import { confirmAction } from '../lib/confirm.jsx';
 import { listRecurringBills, createRecurringBill, updateRecurringBill, deleteRecurringBill } from '../lib/api.js';
-import { todayStr, fmt } from '../lib/format.js';
+import { todayStr, money, categoryPath } from '../lib/format.js';
+import PageHeader from '../components/PageHeader.jsx';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
 
@@ -15,12 +21,10 @@ function formatFrequency(bill) {
   return `每月 ${bill.day_of_month} 号`;
 }
 
-export default function BillsPage() {
+function NewBillForm({ onDone }) {
   const { client } = useSupabase();
   const showToast = useToast();
-  const { categories, accounts, ready } = useData();
-
-  const [bills, setBills] = useState([]);
+  const { categories, accounts } = useData();
 
   const [name, setName] = useState('');
   const [type, setType] = useState('expense');
@@ -28,9 +32,94 @@ export default function BillsPage() {
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [frequency, setFrequency] = useState('monthly');
-  const [dayOfMonth, setDayOfMonth] = useState('1');
+  const [dayOfMonth, setDayOfMonth] = useState(1);
   const [dayOfWeek, setDayOfWeek] = useState('1');
   const [nextDueDate, setNextDueDate] = useState(todayStr());
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed || !(Number(amount) > 0)) {
+      showToast('请填写名称和大于 0 的金额', true);
+      return;
+    }
+    setSaving(true);
+    try {
+      await createRecurringBill(client, {
+        name: trimmed,
+        type,
+        amount: Number(amount),
+        category_id: categoryId || null,
+        account_id: accountId || null,
+        frequency,
+        day_of_week: parseInt(dayOfWeek, 10),
+        day_of_month: Number(dayOfMonth) || 1,
+        next_due_date: nextDueDate,
+      });
+      showToast('已添加定时账单');
+      onDone();
+    } catch (err) {
+      showToast('添加失败：' + err.message, true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Stack gap="md">
+        <SegmentedControl
+          fullWidth
+          data={[{ label: '支出', value: 'expense' }, { label: '收入', value: 'income' }]}
+          value={type}
+          color={type === 'income' ? 'blue' : 'coral'}
+          onChange={(v) => { setType(v); setCategoryId(''); }}
+        />
+        <TextInput label="名称" placeholder="例如：房租、信用卡还款" required value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
+        <NumberInput label="金额" placeholder="0.00" value={amount} onChange={setAmount} decimalScale={2} min={0} allowNegative={false} thousandSeparator="," hideControls inputMode="decimal" />
+        <SimpleGrid cols={2} spacing="sm">
+          <CategorySelect label="分类" categories={categories} type={type} value={categoryId} onChange={setCategoryId} />
+          <AccountSelect label="账户" accounts={accounts} value={accountId} onChange={setAccountId} />
+        </SimpleGrid>
+        <div>
+          <Text size="sm" fw={500} mb={6}>重复频率</Text>
+          <SegmentedControl
+            fullWidth
+            data={[{ label: '每月', value: 'monthly' }, { label: '每周', value: 'weekly' }, { label: '每天', value: 'daily' }]}
+            value={frequency}
+            onChange={setFrequency}
+          />
+        </div>
+        <SimpleGrid cols={2} spacing="sm">
+          {frequency === 'monthly' && (
+            <NumberInput label="每月第几天" value={dayOfMonth} onChange={setDayOfMonth} min={1} max={31} allowDecimal={false} />
+          )}
+          {frequency === 'weekly' && (
+            <Select
+              label="星期几"
+              data={[1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: String(d), label: `周${WEEKDAY_LABEL[d]}` }))}
+              value={dayOfWeek}
+              onChange={(v) => setDayOfWeek(v || '1')}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: true }}
+            />
+          )}
+          <TextInput type="date" label="首次到期日" required value={nextDueDate} onChange={(e) => setNextDueDate(e.target.value)} />
+        </SimpleGrid>
+        <Button type="submit" loading={saving}>添加</Button>
+      </Stack>
+    </form>
+  );
+}
+
+export default function BillsPage() {
+  const { client } = useSupabase();
+  const showToast = useToast();
+  const { categories, ready } = useData();
+
+  const [bills, setBills] = useState([]);
+  const [newOpened, setNewOpened] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -45,36 +134,6 @@ export default function BillsPage() {
     if (ready) reload();
   }, [ready, reload]);
 
-  async function handleAdd(e) {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    try {
-      await createRecurringBill(client, {
-        name: trimmed,
-        type,
-        amount: parseFloat(amount),
-        category_id: categoryId || null,
-        account_id: accountId || null,
-        frequency,
-        day_of_week: parseInt(dayOfWeek, 10),
-        day_of_month: parseInt(dayOfMonth, 10),
-        next_due_date: nextDueDate,
-      });
-      setName('');
-      setAmount('');
-      setCategoryId('');
-      setAccountId('');
-      setFrequency('monthly');
-      setDayOfMonth('1');
-      setNextDueDate(todayStr());
-      showToast('已添加定时账单');
-      reload();
-    } catch (e) {
-      showToast('添加失败：' + e.message, true);
-    }
-  }
-
   async function handleToggleActive(bill, active) {
     try {
       await updateRecurringBill(client, bill.id, { active });
@@ -85,7 +144,12 @@ export default function BillsPage() {
   }
 
   async function handleDelete(bill) {
-    if (!window.confirm('确认删除这个定时账单？已经生成的记账记录不会被删除。')) return;
+    const ok = await confirmAction({
+      title: `删除「${bill.name}」`,
+      message: '确认删除这个定时账单？已经生成的记账记录不会被删除。',
+      confirmLabel: '删除',
+    });
+    if (!ok) return;
     try {
       await deleteRecurringBill(client, bill.id);
       showToast('已删除');
@@ -96,87 +160,54 @@ export default function BillsPage() {
   }
 
   return (
-    <section>
-      <h1>⏰ 定时账单</h1>
-      <p className="hint">
-        到期后打开网站会自动补记一笔交易并计入账户余额；后端也有真正的定时任务会按时生成，
-        这里的"打开网站补课"只是兜底，万一后端那天没跑成功也不会漏算。
-      </p>
-
-      <section className="add-form-section">
-        <h2>新增定时账单</h2>
-        <form onSubmit={handleAdd} className="tx-form">
-          <div className="tx-form-row">
-            <label className="grow">名称
-              <input type="text" placeholder="例如：信用卡还款" required value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label>类型
-              <select className="type-select" value={type} onChange={(e) => { setType(e.target.value); setCategoryId(''); }}>
-                <option value="expense">支出</option>
-                <option value="income">收入</option>
-              </select>
-            </label>
-            <label>金额
-              <input type="number" step="0.01" min="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </label>
-            <label>分类
-              <CategorySelect categories={categories} type={type} value={categoryId} onChange={setCategoryId} />
-            </label>
-            <label>账户
-              <AccountSelect accounts={accounts} value={accountId} onChange={setAccountId} />
-            </label>
-          </div>
-          <div className="tx-form-row">
-            <label>重复频率
-              <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-                <option value="monthly">每月</option>
-                <option value="weekly">每周</option>
-                <option value="daily">每天</option>
-              </select>
-            </label>
-            {frequency === 'monthly' && (
-              <label>每月第几天
-                <input type="number" min={1} max={31} value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} />
-              </label>
-            )}
-            {frequency === 'weekly' && (
-              <label>星期几
-                <select value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)}>
-                  <option value="1">周一</option>
-                  <option value="2">周二</option>
-                  <option value="3">周三</option>
-                  <option value="4">周四</option>
-                  <option value="5">周五</option>
-                  <option value="6">周六</option>
-                  <option value="0">周日</option>
-                </select>
-              </label>
-            )}
-            <label>首次到期日
-              <input type="date" required value={nextDueDate} onChange={(e) => setNextDueDate(e.target.value)} />
-            </label>
-            <button type="submit" className="btn primary">添加</button>
-          </div>
-        </form>
-      </section>
-
-      <ul className="category-list">
-        {bills.length === 0 ? (
-          <li className="empty">还没有定时账单</li>
-        ) : (
-          bills.map((b) => (
-            <li key={b.id}>
-              <span className="cat-name">
-                {b.name}
-                <span className="tag">{b.type === 'expense' ? '支出' : '收入'} · {fmt(b.amount)} · {formatFrequency(b)}</span>
-              </span>
-              <span className="muted">下次：{b.next_due_date}</span>
-              <label><input type="checkbox" checked={b.active} onChange={(e) => handleToggleActive(b, e.target.checked)} /> 启用</label>
-              <button type="button" className="link-btn danger" onClick={() => handleDelete(b)}>删除</button>
-            </li>
-          ))
+    <>
+      <PageHeader
+        title="定时账单"
+        back="/more"
+        right={(
+          <>
+            <Button size="sm" visibleFrom="sm" leftSection={<IconPlus size={16} />} onClick={() => setNewOpened(true)}>新增定时账单</Button>
+            <ActionIcon variant="subtle" size="lg" hiddenFrom="sm" onClick={() => setNewOpened(true)} aria-label="新增定时账单"><IconPlus size={22} /></ActionIcon>
+          </>
         )}
-      </ul>
-    </section>
+      />
+      <div className="page-body">
+        <Stack gap="sm">
+          <Text size="sm" c="dimmed">
+            到期后会自动记一笔并计入账户余额：后台每天有定时任务生成，打开网站时也会顺手补一次，不会漏记。
+          </Text>
+          <div className="card">
+            {bills.length === 0 ? (
+              <div className="empty-state">还没有定时账单，比如房租、订阅、工资都可以加进来</div>
+            ) : bills.map((b) => (
+              <div key={b.id} className="list-row">
+                <div className="list-row-main" style={{ whiteSpace: 'normal' }}>
+                  <Text fw={600} size="sm" truncate>{b.name}</Text>
+                  <Text size="xs" c="dimmed" truncate>
+                    {formatFrequency(b)} · 下次 {b.next_due_date}
+                    {b.category_id ? ` · ${categoryPath(categories, b.category_id) || ''}` : ''}
+                    {b.accounts?.name ? ` · ${b.accounts.name}` : ''}
+                  </Text>
+                </div>
+                <b className={b.type}>{money(b.amount)}</b>
+                <Switch size="sm" checked={b.active} onChange={(e) => handleToggleActive(b, e.currentTarget.checked)} aria-label="启用" />
+                <Menu position="bottom-end" withinPortal shadow="md">
+                  <Menu.Target>
+                    <ActionIcon variant="subtle" color="gray" aria-label="更多操作"><IconDotsVertical size={16} /></ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => handleDelete(b)}>删除</Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </div>
+            ))}
+          </div>
+        </Stack>
+      </div>
+
+      <Modal opened={newOpened} onClose={() => setNewOpened(false)} title={<Text fw={700}>新增定时账单</Text>} centered size="lg">
+        {newOpened && <NewBillForm onDone={() => { setNewOpened(false); reload(); }} />}
+      </Modal>
+    </>
   );
 }

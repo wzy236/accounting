@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useSupabase } from './SupabaseContext.jsx';
-import { useToast } from './ToastContext.jsx';
+import { useToast } from './toast.js';
 import { ensureDefaultCategories, listCategories, getAccountBalances, generateDueRecurringTransactions } from './api.js';
 
 const DataContext = createContext(null);
