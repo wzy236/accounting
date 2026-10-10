@@ -10,6 +10,26 @@ import { extractCandidatesFromCsv, extractCandidatesFromExcel } from '../lib/spr
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
 
+const EXAMPLE_CSV = `日期,描述,金额
+2026-10-01,工资入账,12000.00
+2026-10-02,超市购物,-358.60
+2026-10-03,星巴克,-42.00
+2026-10-05,信用卡还款,-1200.00
+2026-10-08,地铁充值,-100.00
+2026-10-10,退款,(66.50)
+2026-10-12,朋友转账,500.00
+`;
+
+function downloadExampleCsv() {
+  const blob = new Blob([EXAMPLE_CSV], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '对账单导入示例.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** 按文件后缀分发到对应的解析器，统一返回候选交易记录数组。 */
 async function extractCandidatesFromFile(file) {
   const name = file.name.toLowerCase();
@@ -106,6 +126,15 @@ export default function ImportPage() {
             <input ref={fileInputRef} type="file" accept="application/pdf,.csv,text/csv,.xlsx,.xls" onChange={handleFileChange} />
           </label>
           {parsing && <p className="hint">正在解析文件…</p>}
+
+          <div className="example-block">
+            <p className="hint">
+              不确定格式？CSV / Excel 每一行只要能同时识别出<strong>日期</strong>和<strong>两位小数的金额</strong>就行，
+              列的顺序、列数、要不要表头都无所谓——下面是一份可以直接导入试试的示例：
+            </p>
+            <pre className="example-csv">{EXAMPLE_CSV}</pre>
+            <button type="button" className="link-btn" onClick={downloadExampleCsv}>下载示例 CSV</button>
+          </div>
         </section>
       ) : (
         <section>

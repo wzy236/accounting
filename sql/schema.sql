@@ -152,6 +152,13 @@ drop policy if exists "recurring_bills_delete_own" on public.recurring_bills;
 create policy "recurring_bills_delete_own" on public.recurring_bills
   for delete using (auth.uid() = user_id);
 
+-- ========== 多币种支持 ==========
+-- amount 列的本位货币固定是 CAD；记一笔外币交易时，前端按当天实时汇率换算成 CAD 存进 amount，
+-- 同时把用户实际输入的原始金额/币种/换算时用的汇率存下来，方便在界面上显示“原来是多少钱”。
+alter table public.transactions add column if not exists currency text not null default 'CAD';
+alter table public.transactions add column if not exists original_amount numeric(12,2);
+alter table public.transactions add column if not exists exchange_rate numeric(12,6);
+
 -- ========== 分类支持二级子分类 ==========
 -- 只支持两级（子分类的父分类必须是顶级分类），这个限制在前端做，数据库层面只保证不能指向自己。
 alter table public.categories

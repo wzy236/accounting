@@ -15,7 +15,7 @@
 
 打开你的 Supabase 项目 → **SQL Editor** → 新建查询 → 粘贴 [`sql/schema.sql`](sql/schema.sql) 的全部内容 → Run。
 
-这一步会创建 `categories`（分类）、`transactions`（交易记录）、`accounts`（银行账户/信用卡）、`recurring_bills`（定时账单）四张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。重复执行是安全的，已经跑过旧版的项目再跑一次会自动补上新增的表和列。
+这一步会创建 `categories`（分类）、`transactions`（交易记录）、`accounts`（银行账户/信用卡）、`recurring_bills`（定时账单）四张表，并开启 **Row Level Security**（每个用户通过 REST API 只能读写自己的数据，即使 anon key 是公开的也不会泄露别人的数据）。重复执行是安全的，已经跑过旧版的项目再跑一次会自动补上新增的表和列（比如这次给 `transactions` 新加的 `currency`/`original_amount`/`exchange_rate` 三列）——**加了多币种功能后必须重新跑一次这个脚本，不然记账的时候会报找不到 `currency` 列的错**。
 
 ### 2. 确认 Auth 邮箱设置
 
@@ -59,8 +59,10 @@ npm run dev
 - 上传银行/信用卡对账单（PDF、Excel .xlsx/.xls 或 CSV），浏览器本地识别候选交易记录，预览核对后批量导入
 - **账户管理**：添加多个银行账户/信用卡，自动按「初始余额 + 关联交易的收支」算出当前余额（信用卡欠款显示为负数）；随时可以"调整余额"，系统会自动补一笔差额的收入/支出记录，而不是直接改数字，保证余额变动都能在记账记录里查到
 - **转账**：在自己的账户之间转移资金（比如还信用卡欠款），记成一对收入/支出记录但不计入月度收入/支出统计和饼图，只影响账户余额
+- **多币种**：记一笔账时可以选择金额是哪种货币（CAD/USD/EUR/...），非 CAD 会调用 [Frankfurter](https://www.frankfurter.app) 实时汇率接口自动换算成本位货币 CAD 存进数据库，原始金额和当时用的汇率也会一并记下来，列表里会标出"原始 XX USD"这种提示
 - **定时账单**：设置按天/周/月重复的账单（房租、信用卡还款等），[`server/`](server) 里的 GitHub Actions 定时任务会按真实时间表自动生成交易；打开网站时也会顺手补一次，双重保险
 - 可安装为 PWA，离线也能打开 app 外壳
+- 顶部导航右侧有个小标签显示当前部署的 commit（例如 `v238ddc3`），鼠标悬停能看到构建时间，用来确认网站是不是已经更新到最新版本
 
 ## Supabase 免费版会自动暂停
 

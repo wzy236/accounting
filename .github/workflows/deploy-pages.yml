@@ -32,6 +32,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
+      - name: 记录构建信息（用于页面上显示版本号）
+        run: |
+          echo "VITE_COMMIT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VITE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
       - run: npm run build
         working-directory: web
       - uses: actions/configure-pages@v5
