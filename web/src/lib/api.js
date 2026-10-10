@@ -186,7 +186,12 @@ export async function updateAccount(client, id, fields) {
 }
 
 export async function deleteAccount(client, id) {
-  return unwrap(await client.from('accounts').delete().eq('id', id));
+  // 被 RLS 挡住时 Supabase 不会报错，只是删了 0 行；要求返回被删的行，才能发现“其实没删掉”
+  const deleted = unwrap(await client.from('accounts').delete().eq('id', id).select('id'));
+  if (!deleted || deleted.length === 0) {
+    throw new Error('数据库没有删除这个账户（删了 0 行），可能是缺少删除权限，请在 Supabase 重新执行 sql/schema.sql');
+  }
+  return deleted;
 }
 
 /** 每个账户的当前余额 = 初始余额 + 关联到该账户的收入 - 支出。 */
