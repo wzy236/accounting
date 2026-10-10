@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionIcon, Button, Input, Menu, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
+  ActionIcon, Button, Group, Input, Menu, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput,
 } from '@mantine/core';
 import { IconDotsVertical, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
@@ -9,7 +9,9 @@ import { useData } from '../lib/DataContext.jsx';
 import { confirmAction } from '../lib/confirm.jsx';
 import { listRecurringBills, createRecurringBill, updateRecurringBill, deleteRecurringBill } from '../lib/api.js';
 import { todayStr, money, categoryPath, WEEKDAYS, weekday } from '../lib/format.js';
+import { recurringTotals, yearlyAmount } from '../lib/billStats.js';
 import PageHeader from '../components/PageHeader.jsx';
+import { SummaryBar } from '../components/TransactionList.jsx';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
 
@@ -123,6 +125,9 @@ export default function BillsPage() {
 
   const [bills, setBills] = useState([]);
   const [newOpened, setNewOpened] = useState(false);
+  const [period, setPeriod] = useState('monthly');
+
+  const totals = recurringTotals(bills)[period];
 
   const reload = useCallback(async () => {
     try {
@@ -176,6 +181,29 @@ export default function BillsPage() {
       />
       <div className="page-body">
         <Stack gap="sm">
+          {bills.length > 0 && (
+            <>
+              <Group justify="space-between" wrap="nowrap">
+                <Text fw={600}>固定账单收支</Text>
+                <SegmentedControl
+                  size="xs"
+                  data={[{ label: '月均', value: 'monthly' }, { label: '每年', value: 'yearly' }]}
+                  value={period}
+                  onChange={setPeriod}
+                />
+              </Group>
+              <SummaryBar
+                items={[
+                  { label: '固定收入', value: money(totals.income), className: 'income' },
+                  { label: '固定支出', value: money(totals.expense), className: 'expense' },
+                  { label: '净流水', value: money(totals.net), className: totals.net < 0 ? 'expense' : 'income' },
+                ]}
+              />
+              <Text size="xs" c="dimmed" mt={-4}>
+                只算已启用的定时账单，按一年发生的次数折算：每天 365 次、每周 52 次、每两周 26 次、每月 12 次；月均 = 每年 ÷ 12。
+              </Text>
+            </>
+          )}
           <Text size="sm" c="dimmed">
             到期后会自动记一笔并计入账户余额：后台每天有定时任务生成，打开网站时也会顺手补一次，不会漏记。
           </Text>
@@ -183,7 +211,7 @@ export default function BillsPage() {
             {bills.length === 0 ? (
               <div className="empty-state">还没有定时账单，比如房租、订阅、工资都可以加进来</div>
             ) : bills.map((b) => (
-              <div key={b.id} className="list-row">
+              <div key={b.id} className="list-row" style={{ opacity: b.active ? 1 : 0.55 }}>
                 <div className="list-row-main" style={{ whiteSpace: 'normal' }}>
                   <Text fw={600} size="sm" truncate>{b.name}</Text>
                   <Text size="xs" c="dimmed" truncate>
@@ -192,7 +220,12 @@ export default function BillsPage() {
                     {b.accounts?.name ? ` · ${b.accounts.name}` : ''}
                   </Text>
                 </div>
-                <b className={b.type}>{money(b.amount)}</b>
+                <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <b className={b.type}>{money(b.amount)}</b>
+                  {b.frequency !== 'monthly' && (
+                    <Text size="xs" c="dimmed">月均 {money(yearlyAmount(b) / 12)}</Text>
+                  )}
+                </div>
                 <Switch size="sm" checked={b.active} onChange={(e) => handleToggleActive(b, e.currentTarget.checked)} aria-label="启用" />
                 <Menu position="bottom-end" withinPortal shadow="md">
                   <Menu.Target>
