@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { DataProvider } from '../lib/DataContext.jsx';
+import { COMMIT_SHA, BUILD_TIME } from '../lib/version.js';
 
 const NAV_ITEMS = [
   { to: '/transactions', label: '记账' },
@@ -41,6 +42,12 @@ export default function Layout() {
               Supabase 设置
             </button>
             <button type="button" className="link-btn" onClick={handleLogout}>退出</button>
+            <span
+              className="version-tag"
+              title={BUILD_TIME ? `构建时间（UTC）：${BUILD_TIME}` : '本地开发环境'}
+            >
+              v{COMMIT_SHA}
+            </span>
           </div>
         </div>
       </header>

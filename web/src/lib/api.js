@@ -70,7 +70,7 @@ export async function listTransactionsForMonth(client, monthStr) {
   }));
 }
 
-export async function createTransaction(client, { date, type, amount, category_id, account_id, description, source }) {
+export async function createTransaction(client, { date, type, amount, category_id, account_id, description, source, currency, original_amount, exchange_rate }) {
   return unwrap(
     await client
       .from('transactions')
@@ -80,6 +80,9 @@ export async function createTransaction(client, { date, type, amount, category_i
         account_id: account_id || null,
         description: description || '',
         source: source || 'manual',
+        currency: currency || 'CAD',
+        original_amount: original_amount ?? null,
+        exchange_rate: exchange_rate ?? null,
       })
       .select()
   );

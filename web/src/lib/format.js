@@ -8,8 +8,12 @@ export function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// 本位货币是 CAD；传进来的 n 已经是换算成 CAD 之后的金额。
 export function fmt(n) {
-  return '¥' + Number(n || 0).toFixed(2);
+  const num = Number(n) || 0;
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${sign}CA$${abs}`;
 }
 
 /** 把一组分类按“顶级分类 -> 紧跟它的子分类”的顺序展开，用于下拉菜单和列表展示。 */

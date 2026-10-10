@@ -63,7 +63,12 @@ export default function TransactionRow({ t, categories, accounts, onChanged }) {
       </td>
       <td><CategorySelect categories={categories} type={type} value={categoryId} onChange={setCategoryId} /></td>
       <td><AccountSelect accounts={accounts} value={accountId} onChange={setAccountId} /></td>
-      <td><input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></td>
+      <td>
+        <input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        {t.currency && t.currency !== 'CAD' && (
+          <div className="fx-original">原始 {Number(t.original_amount).toFixed(2)} {t.currency}</div>
+        )}
+      </td>
       <td><input type="text" value={description} onChange={(e) => setDescription(e.target.value)} /></td>
       <td><span className="tag">{SOURCE_LABEL[t.source] || '手动'}</span></td>
       <td className="row-actions"><button type="button" className="link-btn" onClick={handleSave}>保存</button></td>
