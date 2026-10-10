@@ -20,6 +20,19 @@ function unwrap({ data, error }) {
   return data;
 }
 
+// Supabase（PostgREST）默认一次最多返回 1000 行，超过的部分会被悄悄截掉。
+// 可能超过 1000 行的查询都用这个分页取全：buildQuery 每次返回一个新的查询构造器，必须带稳定的排序。
+const PAGE_SIZE = 1000;
+
+async function fetchAllPages(buildQuery) {
+  const all = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const rows = unwrap(await buildQuery().range(from, from + PAGE_SIZE - 1));
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) return all;
+  }
+}
+
 /* ================= 分类 ================= */
 
 export async function listCategories(client) {
@@ -60,17 +73,17 @@ export async function listTransactionsForMonth(client, monthStr) {
   return listTransactionsInRange(client, start, end);
 }
 
-/** 查询 [start, end) 区间内的交易，日期都是 YYYY-MM-DD。 */
+/** 查询 [start, end) 区间内的交易，日期都是 YYYY-MM-DD；start/end 都不传就是全部交易。 */
 export async function listTransactionsInRange(client, start, end) {
-  const rows = unwrap(
-    await client
-      .from('transactions')
-      .select('*, categories(id,name,color), accounts(id,name)')
-      .gte('date', start)
-      .lt('date', end)
+  const rows = await fetchAllPages(() => {
+    let q = client.from('transactions').select('*, categories(id,name,color), accounts(id,name)');
+    if (start) q = q.gte('date', start);
+    if (end) q = q.lt('date', end);
+    return q
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
-  );
+      .order('id');
+  });
   return rows.map((r) => ({
     ...r,
     category_name: r.categories?.name || null,
@@ -180,8 +193,8 @@ export async function deleteAccount(client, id) {
 export async function getAccountBalances(client) {
   const accounts = await listAccounts(client);
   if (accounts.length === 0) return [];
-  const txs = unwrap(
-    await client.from('transactions').select('account_id,type,amount').not('account_id', 'is', null)
+  const txs = await fetchAllPages(() =>
+    client.from('transactions').select('account_id,type,amount').not('account_id', 'is', null).order('id')
   );
   const deltas = new Map();
   for (const t of txs) {
