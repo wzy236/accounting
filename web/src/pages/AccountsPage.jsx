@@ -2,7 +2,8 @@ import { useState } from 'react';
 import {
   ActionIcon, Button, ColorInput, Menu, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput,
 } from '@mantine/core';
-import { IconArrowsLeftRight, IconPlus, IconScale, IconTrash, IconDotsVertical } from '@tabler/icons-react';
+import { useNavigate } from 'react-router-dom';
+import { IconArrowsLeftRight, IconList, IconPlus, IconScale, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
@@ -125,6 +126,7 @@ export default function AccountsPage() {
   const { client } = useSupabase();
   const showToast = useToast();
   const { accounts, refreshAccounts } = useData();
+  const navigate = useNavigate();
 
   const [newOpened, setNewOpened] = useState(false);
   const [adjusting, setAdjusting] = useState(null);
@@ -202,6 +204,7 @@ export default function AccountsPage() {
                         </button>
                       </Menu.Target>
                       <Menu.Dropdown>
+                        <Menu.Item leftSection={<IconList size={16} />} onClick={() => navigate(`/transactions?accounts=${a.id}`)}>查看记录</Menu.Item>
                         <Menu.Item leftSection={<IconScale size={16} />} onClick={() => setAdjusting(a)}>调整余额</Menu.Item>
                         <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => handleDelete(a)}>删除账户</Menu.Item>
                       </Menu.Dropdown>

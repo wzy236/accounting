@@ -16,7 +16,7 @@ import AccountSelect from './AccountSelect.jsx';
 
 const MODE_COLOR = { income: 'blue', expense: 'coral', transfer: 'gray' };
 
-function TransactionForm({ tx, defaultDate, defaultMode, onDone }) {
+function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDone }) {
   const { client } = useSupabase();
   const { categories, accounts } = useData();
   const showToast = useToast();
@@ -28,7 +28,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, onDone }) {
   const [amount, setAmount] = useState(isEdit ? Number(tx.amount) : '');
   const [date, setDate] = useState(tx?.date || defaultDate || todayStr());
   const [categoryId, setCategoryId] = useState(tx?.category_id || '');
-  const [accountId, setAccountId] = useState(tx?.account_id || '');
+  const [accountId, setAccountId] = useState(tx ? tx.account_id || '' : defaultAccountId || '');
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
   const [description, setDescription] = useState(tx?.description || '');
@@ -271,7 +271,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, onDone }) {
  * 记一笔 / 编辑记录的抽屉：手机上从底部弹出，电脑上从右边滑出。
  * formKey 每次打开都要变，这样表单状态会按新的 tx / 默认值重新初始化。
  */
-export default function TransactionDrawer({ opened, onClose, onSaved, tx, defaultDate, defaultMode = 'expense', formKey }) {
+export default function TransactionDrawer({ opened, onClose, onSaved, tx, defaultDate, defaultMode = 'expense', defaultAccountId, formKey }) {
   const isMobile = useMediaQuery('(max-width: 47.99em)');
   const title = tx ? '编辑记录' : defaultMode === 'transfer' ? '转账' : '记一笔';
   return (
@@ -288,6 +288,7 @@ export default function TransactionDrawer({ opened, onClose, onSaved, tx, defaul
         tx={tx}
         defaultDate={defaultDate}
         defaultMode={defaultMode}
+        defaultAccountId={defaultAccountId}
         onDone={(changed) => {
           onClose();
           if (changed) onSaved?.();
