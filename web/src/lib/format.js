@@ -52,6 +52,13 @@ export function fmt(n) {
   return `${sign}CA$${money(Math.abs(num))}`;
 }
 
+/** 按指定币种显示：CAD 显示成 CA$1,234.00，其他币种显示成 1,234.00 USD。 */
+export function fmtIn(n, currency = 'CAD') {
+  if (!currency || currency === 'CAD') return fmt(n);
+  const num = Number(n) || 0;
+  return `${num < 0 ? '-' : ''}${money(Math.abs(num))} ${currency}`;
+}
+
 /** 不带货币符号的金额，用在列表这种密集的地方。 */
 export function money(n) {
   return (Number(n) || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

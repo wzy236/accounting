@@ -50,3 +50,35 @@ export async function fetchRate(from, to) {
 export function formatForeign(amount, currency) {
   return `${Number(amount).toFixed(2)} ${currency}`;
 }
+
+/** 一批币种 → CAD 的汇率表（CAD 自己是 1）；查不到的币种值为 null，调用方自己决定怎么处理。 */
+export async function fetchRatesToHome(currencies) {
+  const uniq = [...new Set(currencies.filter((c) => c && c !== HOME_CURRENCY))];
+  const entries = await Promise.all(uniq.map(async (c) => {
+    try {
+      return [c, await fetchRate(c, HOME_CURRENCY)];
+    } catch {
+      return [c, null];
+    }
+  }));
+  return Object.fromEntries([[HOME_CURRENCY, 1], ...entries]);
+}
+
+export const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * 某个账户币种下的一笔金额，转成写进 transactions 的字段：amount 永远是 CAD，
+ * 非 CAD 账户额外记下原币金额、币种和汇率。
+ */
+export async function toStoredAmount(amountInCurrency, currency) {
+  if (!currency || currency === HOME_CURRENCY) {
+    return { amount: round2(amountInCurrency), currency: HOME_CURRENCY, original_amount: null, exchange_rate: null };
+  }
+  const rate = await fetchRate(currency, HOME_CURRENCY);
+  return {
+    amount: round2(amountInCurrency * rate),
+    currency,
+    original_amount: round2(amountInCurrency),
+    exchange_rate: rate,
+  };
+}

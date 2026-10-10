@@ -8,6 +8,7 @@ import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
 import { createTransactionsBulk } from '../lib/api.js';
+import { HOME_CURRENCY, fetchRatesToHome, round2 } from '../lib/currency.js';
 import { extractTextFromPdf } from '../lib/pdfExtract.js';
 import { parseStatementText } from '../lib/bankStatementParser.js';
 import { extractCandidatesFromCsv, extractCandidatesFromExcel } from '../lib/spreadsheetImport.js';
@@ -48,6 +49,7 @@ async function extractCandidatesFromFile(file) {
 }
 
 function CandidateCard({ r, onChange, categories, accounts }) {
+  const ccy = accounts.find((a) => String(a.id) === String(r.account_id))?.currency || HOME_CURRENCY;
   return (
     <div className="card" style={{ opacity: r.include ? 1 : 0.55 }}>
       <Stack gap="xs" p="sm">
@@ -64,7 +66,19 @@ function CandidateCard({ r, onChange, categories, accounts }) {
         </Group>
         <Group gap="xs" wrap="nowrap">
           <TextInput size="xs" placeholder="描述" value={r.description} onChange={(e) => onChange({ description: e.target.value })} style={{ flex: 1 }} />
-          <NumberInput size="xs" w={110} value={r.amount} onChange={(v) => onChange({ amount: v })} decimalScale={2} min={0} allowNegative={false} hideControls inputMode="decimal" />
+          <NumberInput
+            size="xs"
+            w={110}
+            value={r.amount}
+            onChange={(v) => onChange({ amount: v })}
+            decimalScale={2}
+            min={0}
+            allowNegative={false}
+            hideControls
+            inputMode="decimal"
+            rightSection={ccy !== HOME_CURRENCY ? <Text size="10px" c="dimmed">{ccy}</Text> : null}
+            aria-label="金额"
+          />
         </Group>
         <SimpleGrid cols={2} spacing="xs">
           <CategorySelect size="xs" categories={categories} type={r.type} value={r.category_id} onChange={(v) => onChange({ category_id: v })} />
@@ -139,7 +153,17 @@ export default function ImportPage() {
 
     setSaving(true);
     try {
-      await createTransactionsBulk(client, selected);
+      // 导入到外币账户的记录，对账单上的金额就是这个账户的币种，换算成 CAD 再存
+      const ccyOf = (id) => accounts.find((a) => String(a.id) === String(id))?.currency || HOME_CURRENCY;
+      const rates = await fetchRatesToHome(selected.map((r) => ccyOf(r.account_id)));
+      const toInsert = selected.map((r) => {
+        const ccy = ccyOf(r.account_id);
+        if (ccy === HOME_CURRENCY) return r;
+        const rate = rates[ccy];
+        if (!rate) throw new Error(`查不到 ${ccy} 的实时汇率，请稍后再试`);
+        return { ...r, amount: round2(r.amount * rate), currency: ccy, original_amount: r.amount, exchange_rate: rate };
+      });
+      await createTransactionsBulk(client, toInsert);
       showToast(`成功导入 ${selected.length} 条记录`);
       refreshAccounts();
       resetImport();

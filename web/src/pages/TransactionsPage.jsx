@@ -6,7 +6,7 @@ import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
 import { listTransactionsForMonth, listTransactionsInRange } from '../lib/api.js';
-import { defaultMonth, todayStr, fmt, money, monthLabel, shiftMonth } from '../lib/format.js';
+import { defaultMonth, todayStr, fmtIn, money, monthLabel, shiftMonth } from '../lib/format.js';
 import PageHeader, { PeriodSwitcher } from '../components/PageHeader.jsx';
 import TransactionDrawer from '../components/TransactionDrawer.jsx';
 import TransactionFilter, { NO_ACCOUNT } from '../components/TransactionFilter.jsx';
@@ -201,7 +201,7 @@ export default function TransactionsPage() {
                   >
                     <span className="dot" style={{ background: a.color }} />
                     <span className="muted">{a.name}</span>
-                    <b className={a.balance < 0 ? 'expense' : 'income'}>{fmt(a.balance)}</b>
+                    <b className={a.balance < 0 ? 'expense' : 'income'}>{fmtIn(a.balance, a.currency)}</b>
                   </button>
                 );
               })}

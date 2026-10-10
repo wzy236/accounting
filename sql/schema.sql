@@ -101,6 +101,9 @@ drop policy if exists "accounts_delete_own" on public.accounts;
 create policy "accounts_delete_own" on public.accounts
   for delete using (auth.uid() = user_id);
 
+-- 账户币种：外币账户（比如美元卡）的余额按自己的币种显示，总资产按实时汇率折成 CAD
+alter table public.accounts add column if not exists currency text not null default 'CAD';
+
 -- 交易记录关联账户（可选，不选则不计入任何账户余额）
 alter table public.transactions
   add column if not exists account_id uuid references public.accounts(id) on delete set null;
