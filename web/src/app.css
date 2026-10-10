@@ -234,6 +234,26 @@ button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0
 .list-row:has(.category-main:hover) { background: var(--mantine-color-gray-0); }
 .list-row-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 分类下拉（TreeSelect）：自己画的展开箭头。
+   Mantine 给没有子项的行多加了 6px 左内边距，所以占位只要 18px，名字就能和有箭头的行对齐。 */
+.tree-node { display: flex; flex: 1; align-items: center; gap: 4px; min-width: 0; }
+.tree-node-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-check { flex-shrink: 0; margin-left: auto; color: var(--mantine-primary-color-filled); }
+.tree-chevron, .tree-chevron-spacer { height: 24px; flex-shrink: 0; }
+.tree-chevron-spacer { width: 18px; }
+.tree-chevron {
+  width: 24px;
+  display: grid;
+  place-items: center;
+  margin: -4px 0;
+  border-radius: 6px;
+  color: var(--mantine-color-gray-6);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.12s ease;
+}
+.tree-chevron:hover { background: var(--mantine-color-gray-1); }
+.tree-chevron.open { transform: rotate(90deg); }
+
 .ccy-code { font-size: 11px; font-weight: 600; margin-left: 4px; color: var(--mantine-color-gray-6); }
 
 .empty-state { padding: 36px 16px; text-align: center; color: var(--mantine-color-gray-5); font-size: 14px; }
