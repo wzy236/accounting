@@ -1,10 +1,11 @@
 name: Keep Supabase awake
 
-# Supabase 免费版项目如果连续 7 天没有 API 请求会被自动暂停（需要去后台手动点 Restore 才能恢复）。
-# 这个 workflow 每 3 天请求一次 Supabase 的 REST API，制造一次真实的活动，防止项目被自动暂停。
+# Supabase 免费版项目如果一周内活动太少就会被自动暂停（需要去后台手动点 Restore 才能恢复）。
+# 官方的说法是：过去一周里每天都有几次对数据库的请求，就不会被暂停。
+# 以前每 3 天只请求 1 次，不够，2026 年 10 月还是被暂停了；现在改成每 6 小时跑一次、每次查 4 张表。
 on:
   schedule:
-    - cron: '0 4 */3 * *'
+    - cron: '17 */6 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -29,14 +30,24 @@ jobs:
           echo "::add-mask::$key"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: 请求一次 Supabase REST API
+      - name: 请求几次 Supabase REST API
         run: |
-          status=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
-            "${{ steps.config.outputs.url }}/rest/v1/categories?select=id&limit=1" \
-            -H "apikey: ${{ steps.config.outputs.key }}")
-          echo "HTTP status: $status"
-          if [ "$status" -ge 400 ]; then
-            echo "响应内容："
-            cat /tmp/resp.json
+          host=$(echo "${{ steps.config.outputs.url }}" | sed -E 's#^https?://##; s#/.*##')
+          if ! getent hosts "$host" > /dev/null; then
+            echo "::error title=Supabase 项目连不上::域名 $host 解析不到，项目多半已经被暂停了。去 https://supabase.com/dashboard 打开这个项目点 Restore project。"
             exit 1
           fi
+          failed=0
+          for table in categories accounts transactions recurring_bills; do
+            status=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+              "${{ steps.config.outputs.url }}/rest/v1/$table?select=id&limit=1" \
+              -H "apikey: ${{ steps.config.outputs.key }}") || status=000
+            echo "$table: HTTP $status"
+            if [ "$status" -ge 400 ] || [ "$status" = "000" ]; then
+              echo "响应内容："
+              cat /tmp/resp.json 2>/dev/null
+              echo
+              failed=1
+            fi
+          done
+          exit $failed
