@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Button, Checkbox, Code, FileInput, Group, Loader, NumberInput, SegmentedControl, SimpleGrid, Stack, Text, TextInput,
+  Alert, Button, Checkbox, Code, FileInput, Group, Loader, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, TextInput,
 } from '@mantine/core';
 import { IconDownload, IconFileImport, IconInfoCircle } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
@@ -12,19 +12,30 @@ import { HOME_CURRENCY, fetchRatesToHome, round2 } from '../lib/currency.js';
 import { extractTextFromPdf } from '../lib/pdfExtract.js';
 import { parseStatementText } from '../lib/bankStatementParser.js';
 import { extractCandidatesFromCsv, extractCandidatesFromExcel } from '../lib/spreadsheetImport.js';
+import { matchAccount, matchCategory } from '../lib/importMatch.js';
 import PageHeader from '../components/PageHeader.jsx';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
 
-const EXAMPLE_CSV = `日期,描述,金额
-2026-10-01,工资入账,12000.00
-2026-10-02,超市购物,-358.60
-2026-10-03,星巴克,-42.00
-2026-10-05,信用卡还款,-1200.00
-2026-10-08,地铁充值,-100.00
-2026-10-10,退款,(66.50)
-2026-10-12,朋友转账,500.00
+const EXAMPLE_CSV = `日期,描述,金额,分类,子分类,账户
+2026-10-01,工资入账,6000.00,工资,,
+2026-10-02,Costco,-158.60,购物,,
+2026-10-03,Starbucks,-6.25,餐饮,咖啡,
+2026-10-05,Presto 月票,-156.00,交通,,
+2026-10-08,Amazon 退款,25.99,,,
+2026-10-12,朋友转账,500.00,其他收入,,
 `;
+
+// 标准 CSV 的列说明（表头写中文或常见的英文列名都认）
+const FORMAT_COLUMNS = [
+  ['日期', '必填', '2026-10-05、2026/10/05、10/05/2026、2026年10月5日 都可以'],
+  ['金额', '必填', '负数是支出，正数是收入；也可以不要这一列，改用「支出」「收入」两列（Debit / Credit）'],
+  ['描述', '可选', '商家或备注'],
+  ['分类、子分类', '可选', '写网站里已有的分类名，导入时自动选好；也可以只用分类一列写成「餐饮 · 咖啡」'],
+  ['账户', '可选', '写网站里的账户名；留空的话，导入时可以一次给全部记录选账户'],
+];
+
+const listNames = (names) => (names.length > 8 ? `${names.slice(0, 8).join('、')} 等 ${names.length} 个` : names.join('、'));
 
 function downloadExampleCsv() {
   const blob = new Blob([EXAMPLE_CSV], { type: 'text/csv;charset=utf-8' });
@@ -100,9 +111,11 @@ export default function ImportPage() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState(null); // null = 还没上传；否则是候选记录数组
+  const [missing, setMissing] = useState({ categories: [], accounts: [] }); // CSV 里写了、但网站里没有的分类/账户名
 
   function resetImport() {
     setRows(null);
+    setMissing({ categories: [], accounts: [] });
     setError('');
     setFile(null);
   }
@@ -118,7 +131,20 @@ export default function ImportPage() {
         setError('未能从该文件中识别出任何交易记录，可能格式不受支持，请检查文件或尝试其他对账单。');
         return;
       }
-      setRows(candidates.map((c) => ({ ...c, include: true, category_id: '', account_id: '' })));
+      // CSV 里写了分类名 / 账户名的，对应到网站里已有的分类和账户
+      const missingCategories = new Set();
+      const missingAccounts = new Set();
+      setRows(candidates.map((c) => {
+        const category = matchCategory(categories, c.type, c.categoryName, c.subcategoryName);
+        const account = matchAccount(accounts, c.accountName);
+        if (category.missing) missingCategories.add(category.missing);
+        if (account.missing) missingAccounts.add(account.missing);
+        return {
+          date: c.date, description: c.description, amount: c.amount, type: c.type,
+          include: true, category_id: category.id, account_id: account.id,
+        };
+      }));
+      setMissing({ categories: [...missingCategories], accounts: [...missingAccounts] });
     } catch (err) {
       setError('解析文件失败：' + err.message);
     } finally {
@@ -130,7 +156,13 @@ export default function ImportPage() {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...fields } : r)));
   }
 
+  // 「全部记录的账户」：所有记录账户一致时显示那个账户，否则留空
+  function setAllAccounts(accountId) {
+    setRows((prev) => prev.map((r) => ({ ...r, account_id: accountId })));
+  }
+
   const selectedCount = rows ? rows.filter((r) => r.include).length : 0;
+  const commonAccount = rows?.length && rows.every((r) => r.account_id === rows[0].account_id) ? rows[0].account_id : '';
 
   async function handleConfirm() {
     const selected = rows
@@ -205,11 +237,23 @@ export default function ImportPage() {
 
               <div className="card">
                 <Stack gap="sm" p="md">
-                  <Text fw={600} size="sm">格式示例</Text>
-                  <Text size="sm" c="dimmed">
-                    CSV / Excel 每一行只要能同时识别出<b>日期</b>和<b>两位小数的金额</b>就行，列的顺序、列数、要不要表头都无所谓。负数或括号表示支出。
-                  </Text>
+                  <Text fw={600} size="sm">标准 CSV 格式</Text>
+                  <Text size="sm" c="dimmed">第一行是表头，列的顺序随意；Excel 也一样，只读第一个工作表。</Text>
+                  <Table className="format-table" verticalSpacing={6} fz="sm">
+                    <Table.Tbody>
+                      {FORMAT_COLUMNS.map(([column, required, note]) => (
+                        <Table.Tr key={column}>
+                          <Table.Td fw={600} style={{ whiteSpace: 'nowrap' }}>{column}</Table.Td>
+                          <Table.Td c={required === '必填' ? undefined : 'dimmed'} style={{ whiteSpace: 'nowrap' }}>{required}</Table.Td>
+                          <Table.Td c="dimmed">{note}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
                   <Code block className="example-csv">{EXAMPLE_CSV}</Code>
+                  <Text size="xs" c="dimmed">
+                    没有表头的文件也能导入：每一行只要能找到日期和两位小数的金额就行（PDF 也按这个规则识别），分类和账户导入时再选。
+                  </Text>
                   <Group>
                     <Button variant="light" size="xs" leftSection={<IconDownload size={14} />} onClick={downloadExampleCsv}>下载示例 CSV</Button>
                   </Group>
@@ -218,7 +262,37 @@ export default function ImportPage() {
             </>
           ) : (
             <>
-              <Text size="sm" c="dimmed">识别到 {rows.length} 条记录，请核对后确认导入，取消勾选可跳过某条。</Text>
+              <div className="card">
+                <Stack gap="xs" p="sm">
+                  <Text size="sm" c="dimmed">识别到 {rows.length} 条记录，请核对后确认导入，取消勾选可跳过某条。</Text>
+                  {accounts.length > 0 && (
+                    <AccountSelect
+                      label="全部记录的账户"
+                      description="选一个，所有记录一次设好；之后也可以逐条再改"
+                      placeholder={rows.some((r) => r.account_id) ? '各条不一样' : '不选择'}
+                      accounts={accounts}
+                      value={commonAccount}
+                      onChange={setAllAccounts}
+                    />
+                  )}
+                </Stack>
+              </div>
+              {(missing.categories.length > 0 || missing.accounts.length > 0) && (
+                <Alert color="yellow" icon={<IconInfoCircle size={18} />} title="有些名字在网站里没找到">
+                  <Stack gap={4}>
+                    {missing.categories.length > 0 && (
+                      <Text size="sm">
+                        分类：{listNames(missing.categories)}。
+                        {missing.categories.some((n) => n.includes(' · ')) ? '子分类没找到的先归到了大类，其余的先空着。' : '这些记录的分类先空着。'}
+                        可以先去「分类管理」建好再重新导入，或者在下面手动选。
+                      </Text>
+                    )}
+                    {missing.accounts.length > 0 && (
+                      <Text size="sm">账户：{listNames(missing.accounts)}。这些记录的账户先空着，可以用上面的「全部记录的账户」或逐条选。</Text>
+                    )}
+                  </Stack>
+                </Alert>
+              )}
               <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
                 {rows.map((r, i) => (
                   <CandidateCard key={i} r={r} onChange={(f) => updateRow(i, f)} categories={categories} accounts={accounts} />
