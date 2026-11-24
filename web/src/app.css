@@ -468,3 +468,4 @@ button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0
 }
 
 .example-csv { white-space: pre; overflow-x: auto; }
+.format-table td { vertical-align: top; padding-left: 0; }

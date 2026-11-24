@@ -14,7 +14,7 @@ function isValidDate(year, month, day) {
   return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
 }
 
-function extractDate(line) {
+export function extractDate(line) {
   for (const { re, order } of DATE_PATTERNS) {
     const m = line.match(re);
     if (!m) continue;
