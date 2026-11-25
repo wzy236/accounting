@@ -441,6 +441,8 @@ button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0
 .cat-chip.active.income-mode { border-color: var(--mm-income); background: var(--mm-income-soft); color: #1c5fb8; }
 .sub-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--mm-border); }
 .sub-chips .cat-chip { min-height: 32px; padding: 4px 12px; }
+.cat-chip.add { border-style: dashed; color: var(--mantine-color-gray-6); }
+.cat-new { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid var(--mm-border); border-radius: var(--mantine-radius-sm); background: var(--mantine-color-gray-0); }
 
 /* ============ 统计 ============ */
 
