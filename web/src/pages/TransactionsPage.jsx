@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ActionIcon, Button, Loader, Center, Pill, Group, Stack, Tabs, Text } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { IconListCheck, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
-import { listTransactionsForMonth, listTransactionsInRange } from '../lib/api.js';
+import { deleteTransactions, listTransactionsForMonth, listTransactionsInRange } from '../lib/api.js';
+import { confirmAction } from '../lib/confirm.jsx';
 import { defaultMonth, todayStr, fmtIn, money, monthLabel, shiftMonth } from '../lib/format.js';
 import PageHeader, { PeriodSwitcher } from '../components/PageHeader.jsx';
 import TransactionDrawer from '../components/TransactionDrawer.jsx';
@@ -42,6 +43,8 @@ export default function TransactionsPage() {
   const [reloadTick, setReloadTick] = useState(0);
   const [shownDays, setShownDays] = useState(DAYS_PER_PAGE);
   const [drawer, setDrawer] = useState({ opened: false, tx: null, date: null, key: 0 });
+  const [selecting, setSelecting] = useState(false); // 多选模式
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   // 筛选条件放在网址里（?accounts=id1,id2&range=all），刷新不丢，账户页也能直接跳过来
   const accountFilter = (searchParams.get('accounts') || '').split(',').filter(Boolean);
@@ -96,6 +99,52 @@ export default function TransactionsPage() {
     refreshAccounts();
   }
 
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setManySelected(ids, on) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  function exitSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  /** 删除一条（滑动删除）或多条（多选），先确认；转账只删选中的这一侧，跟编辑里删除的规则一样。 */
+  async function deleteRecords(list) {
+    const transfers = list.filter((t) => t.source === 'transfer').length;
+    const ok = await confirmAction({
+      title: list.length === 1 ? '删除记录' : `删除 ${list.length} 笔记录`,
+      message: [
+        list.length === 1 ? `确认删除「${list[0].description || '这条记录'}」？` : `确认删除选中的 ${list.length} 笔记录？`,
+        transfers ? `其中 ${transfers} 笔是转账的一侧，另一侧账户的记录不会自动删除。` : '',
+        '删除后不能恢复。',
+      ].join(''),
+      confirmLabel: '删除',
+    });
+    if (!ok) return;
+    try {
+      await deleteTransactions(client, list.map((t) => t.id));
+      showToast(list.length === 1 ? '已删除' : `已删除 ${list.length} 笔记录`);
+      exitSelecting();
+      handleSaved();
+    } catch (e) {
+      showToast('删除失败：' + e.message, true);
+      handleSaved();
+    }
+  }
+
   function toggleAccountChip(id) {
     const key = String(id);
     setAccountFilter(accountFilter.length === 1 && accountFilter[0] === key ? [] : [key]);
@@ -111,6 +160,13 @@ export default function TransactionsPage() {
   const groups = groupByDate(visible);
   const shownGroups = range === 'all' ? groups.slice(0, shownDays) : groups;
   const selectedItems = selectedDay ? visible.filter((t) => t.date === selectedDay) : [];
+  // 多选只作用于当前列表里看得见的记录；换月份/筛选后看不见的不会被删
+  const displayed = effectiveView === 'daily' ? shownGroups.flatMap(([, items]) => items) : selectedItems;
+  const chosen = displayed.filter((t) => selectedIds.has(t.id));
+  const allChosen = displayed.length > 0 && chosen.length === displayed.length;
+  const listProps = selecting
+    ? { selecting: true, selectedIds, onToggle: toggleSelected, onToggleMany: setManySelected }
+    : { onSelect: openEdit, onDelete: (t) => deleteRecords([t]) };
 
   const monthTotals = new Map();
   if (range === 'all') {
@@ -137,8 +193,13 @@ export default function TransactionsPage() {
         center={range === 'all'
           ? <span className="period-label">全部日期</span>
           : <PeriodSwitcher label={monthLabel(month)} onPrev={() => changeMonth(-1)} onNext={() => changeMonth(1)} />}
-        right={(
+        right={selecting ? (
+          <Button variant="subtle" color="gray" onClick={exitSelecting}>取消</Button>
+        ) : (
           <>
+            <ActionIcon variant="subtle" color="gray" size="lg" onClick={() => setSelecting(true)} aria-label="多选">
+              <IconListCheck size={20} />
+            </ActionIcon>
             <TransactionFilter
               accounts={accounts}
               accountIds={accountFilter}
@@ -221,7 +282,7 @@ export default function TransactionsPage() {
                   return (
                     <Fragment key={date}>
                       {newMonth && <MonthHeader month={m} totals={monthTotals.get(m)} />}
-                      <DayGroup date={date} items={items} categories={categories} onSelect={openEdit} />
+                      <DayGroup date={date} items={items} categories={categories} {...listProps} />
                     </Fragment>
                   );
                 })}
@@ -236,7 +297,7 @@ export default function TransactionsPage() {
             <>
               <MonthCalendar month={month} transactions={visible} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
               {selectedDay && (selectedItems.length > 0 ? (
-                <DayGroup date={selectedDay} items={selectedItems} categories={categories} onSelect={openEdit} />
+                <DayGroup date={selectedDay} items={selectedItems} categories={categories} {...listProps} />
               ) : (
                 <div className="card empty-state">
                   <Text size="sm" c="dimmed" mb="xs">这天没有记录</Text>
@@ -245,10 +306,22 @@ export default function TransactionsPage() {
               ))}
             </>
           )}
+
+          {selecting && (
+            <div className="sticky-actions select-bar">
+              <Text size="sm" fw={600} className="select-count">已选 {chosen.length} 笔</Text>
+              <Button variant="default" size="sm" disabled={displayed.length === 0} onClick={() => setManySelected(displayed.map((t) => t.id), !allChosen)}>
+                {allChosen ? '全不选' : '全选'}
+              </Button>
+              <Button color="red" size="sm" leftSection={<IconTrash size={16} />} disabled={chosen.length === 0} onClick={() => deleteRecords(chosen)}>
+                删除
+              </Button>
+            </div>
+          )}
         </Stack>
       </div>
 
-      <ActionIcon
+      {!selecting && <ActionIcon
         className="fab"
         size={56}
         radius="xl"
@@ -256,7 +329,7 @@ export default function TransactionsPage() {
         onClick={() => openNew(effectiveView === 'calendar' ? selectedDay : null)}
       >
         <IconPlus size={28} />
-      </ActionIcon>
+      </ActionIcon>}
 
       <TransactionDrawer
         opened={drawer.opened}

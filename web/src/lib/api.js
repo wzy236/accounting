@@ -120,6 +120,22 @@ export async function deleteTransaction(client, id) {
   return unwrap(await client.from('transactions').delete().eq('id', id));
 }
 
+/**
+ * 批量删除记录。被 RLS 挡住时 Supabase 不报错、只是删了 0 行，所以要核对实际删掉的条数；
+ * id 太多时网址会过长，每 100 条一批。
+ */
+export async function deleteTransactions(client, ids) {
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const rows = unwrap(await client.from('transactions').delete().in('id', ids.slice(i, i + 100)).select('id'));
+    deleted += rows?.length || 0;
+  }
+  if (deleted < ids.length) {
+    throw new Error(`只删掉了 ${deleted} / ${ids.length} 条，可能是缺少删除权限，请在 Supabase 重新执行 sql/schema.sql`);
+  }
+  return deleted;
+}
+
 export async function createTransactionsBulk(client, rows) {
   return unwrap(await client.from('transactions').insert(rows).select());
 }
