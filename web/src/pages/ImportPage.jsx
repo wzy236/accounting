@@ -13,6 +13,7 @@ import { extractTextFromPdf } from '../lib/pdfExtract.js';
 import { parseStatementText } from '../lib/bankStatementParser.js';
 import { extractCandidatesFromCsv, extractCandidatesFromExcel } from '../lib/spreadsheetImport.js';
 import { matchAccount, matchCategory } from '../lib/importMatch.js';
+import { downloadCsv } from '../lib/exportData.js';
 import PageHeader from '../components/PageHeader.jsx';
 import CategorySelect from '../components/CategorySelect.jsx';
 import AccountSelect from '../components/AccountSelect.jsx';
@@ -36,16 +37,6 @@ const FORMAT_COLUMNS = [
 ];
 
 const listNames = (names) => (names.length > 8 ? `${names.slice(0, 8).join('、')} 等 ${names.length} 个` : names.join('、'));
-
-function downloadExampleCsv() {
-  const blob = new Blob([EXAMPLE_CSV], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '对账单导入示例.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 /** 按文件后缀分发到对应的解析器，统一返回候选交易记录数组。 */
 async function extractCandidatesFromFile(file) {
@@ -255,7 +246,7 @@ export default function ImportPage() {
                     没有表头的文件也能导入：每一行只要能找到日期和两位小数的金额就行（PDF 也按这个规则识别），分类和账户导入时再选。
                   </Text>
                   <Group>
-                    <Button variant="light" size="xs" leftSection={<IconDownload size={14} />} onClick={downloadExampleCsv}>下载示例 CSV</Button>
+                    <Button variant="light" size="xs" leftSection={<IconDownload size={14} />} onClick={() => downloadCsv('对账单导入示例.csv', EXAMPLE_CSV)}>下载示例 CSV</Button>
                   </Group>
                 </Stack>
               </div>
