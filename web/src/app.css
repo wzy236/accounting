@@ -370,6 +370,21 @@ button.list-row:hover, a.list-row:hover { background: var(--mantine-color-gray-0
 .tx-amount { text-align: right; font-weight: 600; font-size: 14px; white-space: nowrap; }
 .tx-original { font-size: 11px; color: var(--mantine-color-gray-5); font-weight: 400; }
 
+/* 滑动删除：行下面垫一层红色，左右各一个「删除」，行滑开就露出来 */
+.tx-swipe { position: relative; overflow: hidden; }
+.tx-swipe + .tx-swipe { border-top: 1px solid var(--mm-divider); }
+.tx-swipe .tx-row { position: relative; z-index: 1; background: #fff; touch-action: pan-y; transition: transform 0.18s ease; -webkit-user-select: none; user-select: none; }
+.tx-swipe .tx-row:hover { background: var(--mantine-color-gray-0); }
+.tx-swipe-actions { position: absolute; inset: 0; display: flex; justify-content: space-between; background: var(--mantine-color-red-6); }
+.tx-swipe-delete { width: 80px; border: 0; background: transparent; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* 多选 */
+.tx-row.selecting { grid-template-columns: auto minmax(56px, 24%) minmax(0, 1fr) auto; }
+.tx-row.selecting.checked { background: var(--mantine-color-coral-0); }
+.day-select { display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; }
+.select-bar { align-items: center; }
+.select-count { margin-right: auto; }
+
 /* ============ 日历视图 ============ */
 
 .cal-head, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
