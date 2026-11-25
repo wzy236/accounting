@@ -326,7 +326,7 @@ function TransactionForm({ tx, defaultDate, defaultMode, defaultAccountId, onDon
             {!isTransferEdit && (
               <Input.Wrapper label="分类">
                 <div style={{ marginTop: 4 }}>
-                  <CategoryPicker categories={categories} type={mode} value={categoryId} onChange={setCategoryId} />
+                  <CategoryPicker key={mode} categories={categories} type={mode} value={categoryId} onChange={setCategoryId} />
                 </div>
               </Input.Wrapper>
             )}
