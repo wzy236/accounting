@@ -23,13 +23,28 @@ function withDistinctColors(items) {
 /**
  * 按分类的饼图 + 带百分比的列表；点有子分类的大类可以展开看子分类。
  * transactions 只要有 type / amount / category_id / source 这几个字段就行（定时账单页也拿它来画固定收支的占比）。
+ * 传了 onOpen 的话（统计页），点没有子分类的分类、子分类、展开后的「全部记录」会回调
+ * onOpen({ name, ids })，ids 是要列出记录的分类 id（未分类是 'none'）。
  */
-export default function CategoryBreakdown({ type, transactions, categories, emptyText }) {
+export default function CategoryBreakdown({ type, transactions, categories, emptyText, onOpen }) {
   const [drillId, setDrillId] = useState(null);
   const drilled = drillId ? aggregateSubcategories(transactions, type, drillId, categories) : null;
   const items = withDistinctColors(drilled ? drilled.items : aggregateByTopCategory(transactions, type, categories));
   const total = items.reduce((s, d) => s + d.total, 0);
   const canDrill = (d) => !drilled && d?.hasChildren;
+  const canOpen = (d) => Boolean(onOpen && d) && !canDrill(d);
+
+  function open(d) {
+    const parent = drilled?.parent;
+    if (!parent) onOpen({ name: d.name, ids: [d.id] });
+    else if (d.id === parent.id) onOpen({ name: `${parent.name}（未细分）`, ids: [parent.id] });
+    else onOpen({ name: `${parent.name} · ${d.name}`, ids: [d.id] });
+  }
+
+  function activate(d) {
+    if (canDrill(d)) setDrillId(d.id);
+    else if (canOpen(d)) open(d);
+  }
 
   return (
     <div className="card">
@@ -65,10 +80,11 @@ export default function CategoryBreakdown({ type, transactions, categories, empt
                 },
                 onClick: (_evt, elements) => {
                   const d = items[elements[0]?.index];
-                  if (canDrill(d)) setDrillId(d.id);
+                  if (d) activate(d);
                 },
                 onHover: (evt, elements) => {
-                  evt.native.target.style.cursor = canDrill(items[elements[0]?.index]) ? 'pointer' : 'default';
+                  const d = items[elements[0]?.index];
+                  evt.native.target.style.cursor = canDrill(d) || canOpen(d) ? 'pointer' : 'default';
                 },
               }}
             />
@@ -82,15 +98,29 @@ export default function CategoryBreakdown({ type, transactions, categories, empt
                   <span className="pct-badge" style={{ background: d.color }}>{pct}%</span>
                   <span className="list-row-main">{d.name}</span>
                   <span>{money(d.total)}</span>
-                  {canDrill(d) && <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />}
+                  {(canDrill(d) || canOpen(d)) && <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />}
                 </>
               );
-              return canDrill(d) ? (
-                <button key={d.id} type="button" className="list-row" onClick={() => setDrillId(d.id)}>{content}</button>
+              return canDrill(d) || canOpen(d) ? (
+                <button key={d.id} type="button" className="list-row" onClick={() => activate(d)}>{content}</button>
               ) : (
                 <div key={d.id} className="list-row">{content}</div>
               );
             })}
+            {drilled?.parent && onOpen && (
+              <button
+                type="button"
+                className="list-row"
+                onClick={() => onOpen({
+                  name: drilled.parent.name,
+                  ids: [drilled.parent.id, ...categories.filter((c) => c.parent_id === drilled.parent.id).map((c) => c.id)],
+                })}
+              >
+                <span className="list-row-main muted">「{drilled.parent.name}」全部记录</span>
+                <span className="muted">{money(total)}</span>
+                <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />
+              </button>
+            )}
           </div>
         </>
       )}
