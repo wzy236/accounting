@@ -10,6 +10,7 @@ import BillsPage from './pages/BillsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import MorePage from './pages/MorePage.jsx';
 import BudgetPage from './pages/BudgetPage.jsx';
+import ExportPage from './pages/ExportPage.jsx';
 
 // 图表（chart.js）和 PDF 导入（pdfjs-dist）体积比较大，不是每次打开都用得到，懒加载减小首屏体积。
 const ChartsPage = lazy(() => import('./pages/ChartsPage.jsx'));
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="more" element={<MorePage />} />
           <Route path="budget" element={<BudgetPage />} />
+          <Route path="export" element={<ExportPage />} />
           <Route path="charts" element={<Suspense><ChartsPage /></Suspense>} />
           <Route path="import" element={<Suspense><ImportPage /></Suspense>} />
           <Route path="*" element={<Navigate to="/transactions" replace />} />
