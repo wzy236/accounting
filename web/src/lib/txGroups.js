@@ -1,9 +1,15 @@
-/** 一组交易的收入/支出合计，转账不算真正的收支。 */
+/**
+ * 算不算真正的收入/支出。账户间转账、余额调整都只影响账户余额，
+ * 不计入收支合计、日历、统计饼图和分类明细。
+ */
+export const countsAsIncomeExpense = (t) => t.source !== 'transfer' && t.source !== 'adjustment';
+
+/** 一组交易的收入/支出合计，转账和余额调整不算真正的收支。 */
 export function dayTotals(items) {
   let income = 0;
   let expense = 0;
   for (const t of items) {
-    if (t.source === 'transfer') continue;
+    if (!countsAsIncomeExpense(t)) continue;
     if (t.type === 'income') income += Number(t.amount);
     else expense += Number(t.amount);
   }

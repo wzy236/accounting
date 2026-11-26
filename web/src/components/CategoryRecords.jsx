@@ -1,6 +1,6 @@
 import { IconChevronLeft } from '@tabler/icons-react';
 import { money } from '../lib/format.js';
-import { groupByDate } from '../lib/txGroups.js';
+import { countsAsIncomeExpense, groupByDate } from '../lib/txGroups.js';
 import { DayGroup } from './TransactionList.jsx';
 
 /**
@@ -9,7 +9,7 @@ import { DayGroup } from './TransactionList.jsx';
  */
 export default function CategoryRecords({ detail, type, transactions, categories, onBack, onSelect }) {
   const known = new Set(categories.map((c) => c.id));
-  const items = transactions.filter((t) => t.type === type && t.source !== 'transfer'
+  const items = transactions.filter((t) => t.type === type && countsAsIncomeExpense(t)
     && detail.ids.includes(known.has(t.category_id) ? t.category_id : 'none'));
   const total = items.reduce((s, t) => s + Number(t.amount), 0);
 
