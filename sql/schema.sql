@@ -11,8 +11,7 @@ create table if not exists public.categories (
   name text not null,
   type text not null check (type in ('income','expense')),
   color text not null default '#888888',
-  created_at timestamptz not null default now(),
-  unique (user_id, name, type)
+  created_at timestamptz not null default now()
 );
 
 -- ========== 交易记录表 ==========
@@ -177,6 +176,12 @@ alter table public.categories drop constraint if exists categories_parent_not_se
 alter table public.categories add constraint categories_parent_not_self check (parent_id is distinct from id);
 
 create index if not exists idx_categories_parent on public.categories (parent_id);
+
+-- 分类重名规则：同一个大类下（或同为大类）不能重名，不同大类下的子分类可以同名，比如「基础 › 其他」和「车 › 其他」。
+-- 旧版本是整个类型下都不能重名（unique (user_id, name, type)），这里换成按上级分类区分的唯一索引。
+alter table public.categories drop constraint if exists categories_user_id_name_type_key;
+create unique index if not exists categories_name_per_parent
+  on public.categories (user_id, type, coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), name);
 
 -- ========== 预算 ==========
 -- 定时账单可以单独选择要不要算进预算（跟“启用”分开：启用决定会不会自动记账，in_budget 决定算不算进预算）

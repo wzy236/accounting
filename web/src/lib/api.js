@@ -49,6 +49,16 @@ export async function ensureDefaultCategories(client) {
   return listCategories(client);
 }
 
+/** 分类重名时给用户看的提示；数据库还是旧规则（同类型下不同大类也不能重名）时，提醒去跑最新的 SQL。 */
+export function categoryErrorMessage(err) {
+  const msg = err?.message || '';
+  if (msg.includes('categories_user_id_name_type_key')) {
+    return '数据库还是旧规则：同类型的分类不能重名。在 Supabase 运行最新的 sql/schema.sql 后，不同大类下的子分类就可以同名了';
+  }
+  if (msg.includes('duplicate')) return '这个大类下已经有叫这个名字的分类了';
+  return msg;
+}
+
 export async function createCategory(client, { name, type, color, parent_id }) {
   return unwrap(await client.from('categories').insert({ name, type, color, parent_id: parent_id || null }).select());
 }
