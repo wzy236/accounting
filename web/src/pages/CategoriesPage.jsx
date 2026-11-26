@@ -7,13 +7,10 @@ import { useSupabase } from '../lib/SupabaseContext.jsx';
 import { useToast } from '../lib/toast.js';
 import { useData } from '../lib/DataContext.jsx';
 import { confirmAction } from '../lib/confirm.jsx';
-import { createCategory, updateCategory, deleteCategory } from '../lib/api.js';
+import { categoryErrorMessage, createCategory, updateCategory, deleteCategory } from '../lib/api.js';
 import { buildCategoryTree } from '../lib/format.js';
 import PageHeader from '../components/PageHeader.jsx';
 import ColorField from '../components/ColorField.jsx';
-
-const duplicateMessage = (err) =>
-  err.message?.includes('duplicate') ? '同类型下已经有叫这个名字的分类了' : err.message;
 
 /**
  * 新增顶级分类 / 在某个大类下新增子分类 / 编辑已有分类（名称、颜色、上级分类）共用一个表单。
@@ -72,7 +69,7 @@ function CategoryForm({ target, onDone }) {
       }
       onDone(true);
     } catch (err) {
-      setError(duplicateMessage(err));
+      setError(categoryErrorMessage(err));
     } finally {
       setSaving(false);
     }
