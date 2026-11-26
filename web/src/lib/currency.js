@@ -1,5 +1,6 @@
-// 实时汇率来自 Frankfurter（欧洲央行每个工作日发布的参考汇率，免费、不需要 API key、支持跨域请求）：
-// https://www.frankfurter.app
+// 实时汇率先查 Frankfurter（欧洲央行等发布的参考汇率，免费、不需要 API key、支持跨域请求，
+// 现在的地址是 https://api.frankfurter.dev，旧的 api.frankfurter.app 已经用不了），
+// 查不到再用 jsDelivr 上的 currency-api 兜底。两个都查不到时，界面上可以手动填汇率。
 export const HOME_CURRENCY = 'CAD';
 
 // 常见币种，Frankfurter 都支持；CAD 放最前面作为默认选项。
@@ -31,20 +32,41 @@ function writeCache(key, value) {
   }
 }
 
-/** 查询 from -> to 的实时汇率。Frankfurter 一天更新一次，同一天同一币种对只请求一次，缓存在 sessionStorage。 */
+async function getJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// 按顺序试，返回 1 from = ? to
+const RATE_SOURCES = [
+  async (from, to) => (await getJson(`https://api.frankfurter.dev/v1/latest?base=${from}&symbols=${to}`)).rates?.[to],
+  async (from, to) => {
+    const f = from.toLowerCase();
+    const data = await getJson(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${f}.min.json`);
+    return data[f]?.[to.toLowerCase()];
+  },
+];
+
+/** 查询 from -> to 的实时汇率。汇率一天更新一次，同一天同一币种对只请求一次，缓存在 sessionStorage。 */
 export async function fetchRate(from, to) {
   if (from === to) return 1;
   const cacheKey = `${RATE_CACHE_PREFIX}${from}:${to}:${todayKey()}`;
   const cached = readCache(cacheKey);
   if (cached) return cached;
 
-  const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
-  if (!res.ok) throw new Error('汇率查询失败，请稍后重试');
-  const data = await res.json();
-  const rate = data.rates?.[to];
-  if (!rate) throw new Error(`没有查到 ${from} → ${to} 的汇率`);
-  writeCache(cacheKey, rate);
-  return rate;
+  for (const source of RATE_SOURCES) {
+    try {
+      const rate = Number(await source(from, to));
+      if (rate > 0) {
+        writeCache(cacheKey, rate);
+        return rate;
+      }
+    } catch {
+      // 这个来源不行就换下一个
+    }
+  }
+  throw new Error(`查不到 ${from} → ${to} 的实时汇率`);
 }
 
 export function formatForeign(amount, currency) {
