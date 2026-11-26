@@ -3,7 +3,7 @@ import { CheckboxIndicator } from '@mantine/core';
 import { WEEKDAYS, categoryPath, money, todayStr, weekday } from '../lib/format.js';
 import { dayTotals, groupByDate } from '../lib/txGroups.js';
 
-const SOURCE_LABEL = { pdf_import: '导入', recurring: '定时账单', adjustment: '余额调整' };
+const SOURCE_LABEL = { pdf_import: '导入', recurring: '定时账单' };
 
 // 滑动删除：按钮宽度，以及“有一行滑开了”的广播事件（同时只留一行滑开）
 const ACTION_W = 80;
@@ -91,7 +91,8 @@ function SwipeRow({ id, onOpen, onDelete, children }) {
  */
 function TxRow({ t, categories, onSelect, selecting, checked, onToggle, onDelete }) {
   const isTransfer = t.source === 'transfer';
-  const catLabel = isTransfer ? '转账' : categoryPath(categories, t.category_id) || '未分类';
+  const isAdjustment = t.source === 'adjustment';
+  const catLabel = isTransfer ? '转账' : isAdjustment ? '余额调整' : categoryPath(categories, t.category_id) || '未分类';
   const meta = [t.account_name, SOURCE_LABEL[t.source]].filter(Boolean).join(' · ');
   const foreign = t.currency && t.currency !== 'CAD';
   const content = (
@@ -101,8 +102,9 @@ function TxRow({ t, categories, onSelect, selecting, checked, onToggle, onDelete
         <div className="tx-desc">{t.description || catLabel}</div>
         {meta && <div className="tx-account">{meta}</div>}
       </span>
-      <span className={`tx-amount ${isTransfer ? 'transfer' : t.type}`}>
-        {money(t.amount)}
+      {/* 转账、余额调整不算收支，金额用灰色；余额调整单独一条，标出是加还是减 */}
+      <span className={`tx-amount ${isTransfer || isAdjustment ? 'transfer' : t.type}`}>
+        {isAdjustment && (t.type === 'income' ? '+' : '−')}{money(t.amount)}
         {foreign && <div className="tx-original">{Number(t.original_amount).toFixed(2)} {t.currency}</div>}
       </span>
     </>

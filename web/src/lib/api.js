@@ -2,6 +2,7 @@
 // 用的是官方 SDK 的查询构造器，权限仍然靠数据库那边的 RLS 策略保证，跟静态站点版本原理一致。
 
 import { HOME_CURRENCY, fetchRate, fetchRatesToHome, toStoredAmount, round2 } from './currency.js';
+import { countsAsIncomeExpense } from './txGroups.js';
 
 export const DEFAULT_CATEGORIES = [
   { name: '餐饮', type: 'expense', color: '#e07a5f' },
@@ -164,13 +165,13 @@ function sortedTotals(totals) {
 
 /**
  * 按顶级分类聚合收入/支出总额（子分类的金额并入它的父分类），供饼图使用。
- * 转账不算真正的收支，排除掉。每一项带 hasChildren，表示这个顶级分类下有子分类、可以点开细看。
+ * 转账和余额调整不算真正的收支，排除掉。每一项带 hasChildren，表示这个顶级分类下有子分类、可以点开细看。
  */
 export function aggregateByTopCategory(transactions, type, categories) {
   const byId = new Map(categories.map((c) => [c.id, c]));
   const totals = new Map();
   for (const t of transactions) {
-    if (t.type !== type || t.source === 'transfer') continue;
+    if (t.type !== type || !countsAsIncomeExpense(t)) continue;
     const cat = byId.get(t.category_id);
     const top = cat ? (cat.parent_id ? byId.get(cat.parent_id) || cat : cat) : UNCATEGORIZED;
     sumInto(totals, top.id, { id: top.id, name: top.name, color: top.color }, Number(t.amount));
@@ -187,7 +188,7 @@ export function aggregateSubcategories(transactions, type, parentId, categories)
   const parent = byId.get(parentId);
   const totals = new Map();
   for (const t of transactions) {
-    if (t.type !== type || t.source === 'transfer') continue;
+    if (t.type !== type || !countsAsIncomeExpense(t)) continue;
     const cat = byId.get(t.category_id);
     if (!cat) continue;
     if (cat.id === parentId) {
