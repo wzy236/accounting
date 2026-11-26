@@ -1,7 +1,7 @@
 // 业务接口层：每个函数第一个参数都是 supabase-js client（来自 useSupabase() 的 context），
 // 用的是官方 SDK 的查询构造器，权限仍然靠数据库那边的 RLS 策略保证，跟静态站点版本原理一致。
 
-import { HOME_CURRENCY, fetchRatesToHome, toStoredAmount, round2 } from './currency.js';
+import { HOME_CURRENCY, fetchRate, fetchRatesToHome, toStoredAmount, round2 } from './currency.js';
 
 export const DEFAULT_CATEGORIES = [
   { name: '餐饮', type: 'expense', color: '#e07a5f' },
@@ -250,13 +250,6 @@ export async function getAccountBalances(client) {
   });
 }
 
-/** 外币字段只在非 CAD 时带上，CAD 记录保持和以前一样。 */
-function foreignFields(stored) {
-  return stored.currency === HOME_CURRENCY
-    ? { amount: stored.amount }
-    : stored;
-}
-
 /**
  * 把账户余额调整到 targetBalance（账户自己的币种）：按差额补一笔收入/支出交易（source: 'adjustment'），
  * 而不是直接改数字，这样余额的每次变动都在记账记录里留痕。差额为 0 时什么都不做。
@@ -281,17 +274,29 @@ export async function adjustAccountBalance(client, account, targetBalance) {
  * 转账不算真正的收入/支出，月度统计和饼图里会把 source: 'transfer' 的记录排除掉。
  * fromAmount / toAmount 分别是两个账户各自币种的金额（同币种时相等）。
  */
-/** 一笔转账对应的两条记录：转出账户一条支出、转入账户一条收入，source 都是 transfer（不计入收支统计）。 */
+/**
+ * 一笔转账对应的两条记录：转出账户一条支出、转入账户一条收入，source 都是 transfer（不计入收支统计）。
+ * fromAmount / toAmount 分别是两个账户各自币种下的金额（同币种时 toAmount 可以不传）。
+ * 两条记录折成 CAD 用同一个值：有一边是 CAD 就直接用那边的金额，不用查汇率；两边都是外币才查实时汇率。
+ * 外币那一侧记下原币金额和实际的汇率（CAD ÷ 原币），账户余额按原币算，所以填的金额就是最终的金额。
+ */
 export async function transferRows({ date, from, to, fromAmount, toAmount, description }) {
   const note = description ? `：${description}` : '';
-  const [out, inn] = await Promise.all([
-    toStoredAmount(fromAmount, from.currency),
-    toStoredAmount(toAmount ?? fromAmount, to.currency),
-  ]);
+  const fromCcy = from.currency || HOME_CURRENCY;
+  const toCcy = to.currency || HOME_CURRENCY;
+  const received = toAmount ?? fromAmount;
+  let cad;
+  if (fromCcy === HOME_CURRENCY) cad = fromAmount;
+  else if (toCcy === HOME_CURRENCY) cad = received;
+  else cad = fromAmount * (await fetchRate(fromCcy, HOME_CURRENCY));
+  cad = round2(cad);
+  const leg = (ccy, amt) => (ccy === HOME_CURRENCY
+    ? { amount: cad }
+    : { amount: cad, currency: ccy, original_amount: round2(amt), exchange_rate: Math.round((cad / amt) * 1e6) / 1e6 });
   return [
     {
       date, type: 'expense',
-      ...foreignFields(out),
+      ...leg(fromCcy, fromAmount),
       account_id: from.id,
       category_id: null,
       description: `转账到「${to.name}」${note}`,
@@ -299,7 +304,7 @@ export async function transferRows({ date, from, to, fromAmount, toAmount, descr
     },
     {
       date, type: 'income',
-      ...foreignFields(inn),
+      ...leg(toCcy, received),
       account_id: to.id,
       category_id: null,
       description: `转账自「${from.name}」${note}`,
