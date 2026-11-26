@@ -61,7 +61,8 @@ const COLUMN_ALIASES = {
   type: ['类型', '收支', '收支类型', 'type'],
   category: ['分类', '类别', 'category'],
   subcategory: ['子分类', '二级分类', 'subcategory'],
-  account: ['账户', 'account'],
+  account: ['账户', '转出账户', 'account', 'from account'],
+  toAccount: ['转入账户', 'to account'],
 };
 
 const normalizeHeader = (cell) => String(cell ?? '').replace(/^\uFEFF/, '').trim().toLowerCase();
@@ -93,6 +94,7 @@ function parseAmountCell(value) {
 
 function typeFromCell(value) {
   const s = normalizeHeader(value);
+  if (/转账|transfer/.test(s)) return 'transfer';
   if (/收入|income|credit|deposit/.test(s)) return 'income';
   if (/支出|expense|debit|withdraw/.test(s)) return 'expense';
   return null;
@@ -116,14 +118,17 @@ function candidateFromColumns(row, columns) {
   }
   if (!parsed) return null;
 
+  const toAccountName = cell('toAccount');
   return {
     date,
     description: cell('description').slice(0, 200),
     amount: parsed.value,
-    type: typeFromCell(cell('type')) || type,
+    // 转账：「账户」是转出账户，「转入账户」是转入账户，金额正负都按绝对值算
+    type: toAccountName ? 'transfer' : typeFromCell(cell('type')) || type,
     categoryName: cell('category'),
     subcategoryName: cell('subcategory'),
     accountName: cell('account'),
+    toAccountName,
   };
 }
 

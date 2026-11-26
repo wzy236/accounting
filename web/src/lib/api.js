@@ -281,13 +281,14 @@ export async function adjustAccountBalance(client, account, targetBalance) {
  * 转账不算真正的收入/支出，月度统计和饼图里会把 source: 'transfer' 的记录排除掉。
  * fromAmount / toAmount 分别是两个账户各自币种的金额（同币种时相等）。
  */
-export async function createTransfer(client, { date, from, to, fromAmount, toAmount, description }) {
+/** 一笔转账对应的两条记录：转出账户一条支出、转入账户一条收入，source 都是 transfer（不计入收支统计）。 */
+export async function transferRows({ date, from, to, fromAmount, toAmount, description }) {
   const note = description ? `：${description}` : '';
   const [out, inn] = await Promise.all([
     toStoredAmount(fromAmount, from.currency),
     toStoredAmount(toAmount ?? fromAmount, to.currency),
   ]);
-  return createTransactionsBulk(client, [
+  return [
     {
       date, type: 'expense',
       ...foreignFields(out),
@@ -304,7 +305,11 @@ export async function createTransfer(client, { date, from, to, fromAmount, toAmo
       description: `转账自「${from.name}」${note}`,
       source: 'transfer',
     },
-  ]);
+  ];
+}
+
+export async function createTransfer(client, transfer) {
+  return createTransactionsBulk(client, await transferRows(transfer));
 }
 
 /* ================= 定时账单 ================= */
